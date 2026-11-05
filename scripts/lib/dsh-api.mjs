@@ -19,7 +19,8 @@ export function detectOrigin() {
   try {
     const listing = execFileSync('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN'], { encoding: 'utf8' })
     for (const line of listing.split('\n')) {
-      if (!/DeepSeek Harness|dsh-desktop-host/u.test(line)) continue
+      // lsof trims the command name to "DeepSeek"; the Host process may also appear as dsh-desktop-host.
+      if (!/DeepSeek|dsh-desktop-host/iu.test(line)) continue
       const match = /127\.0\.0\.1:(\d+)/u.exec(line)
       if (match !== null) return `http://127.0.0.1:${match[1]}`
     }
