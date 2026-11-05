@@ -1,12 +1,12 @@
 {
   "index": {
     "title": {
-      "en": "Maka's DSH Plugins",
-      "zh": "Maka 的 DSH 插件集"
+      "en": "Nemo's DSH Plugins",
+      "zh": "Nemo 的 DSH 插件集"
     },
     "description": {
-      "en": "Personal DSH plugins, installed straight from GitHub and pinned per commit.",
-      "zh": "个人维护的 DSH 插件，直接从 GitHub 安装，按 commit 精确定位版本。"
+      "en": "Nemo's DSH plugins, installed straight from GitHub and pinned per commit.",
+      "zh": "Nemo 个人维护的 DSH 插件，直接从 GitHub 安装，按 commit 精确定位版本。"
     }
   },
   "metadata": {
