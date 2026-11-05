@@ -19,6 +19,7 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
+    "docs/*.png",
     "test/tar.test.mjs",
     "test/route.test.mjs"
   ],

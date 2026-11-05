@@ -1,143 +1,87 @@
-# @local/dsh-pinned-top
+# 置顶在最上
 
-Pinned Sessions get their own **置顶 / Pinned** section at the very top of the
-sidebar, above every workspace group: the Host pin set, most recently pinned first.
+`@local/dsh-pinned-top`：把置顶会话收拢到侧边栏最上方的「置顶」分区，并给每个工作区行加一个「归档全部会话（保留置顶）」按钮。
 
-A pinned row leaves its workspace group, so it is visible without expanding or
-scrolling that group; unpinning puts the row back where the workspace order says.
-Running state does not move rows on its own — only a pin does.
+## 效果图
 
-Hovering a workspace row also reveals **归档全部会话（保留置顶） / Archive all sessions
-(pinned kept)**, which archives every ordinary Session under that workspace in one
-click while leaving its pinned Sessions pinned.
+![侧边栏最上方的置顶分区](docs/preview-pinned.png)
 
-## What it is
+*图：侧边栏最上方的「置顶」分区，两条置顶会话排在所有工作区之上，不展开工作区也能看到。*
 
-A fork of the shipped `@deepseek-ai/dsh-client-ui-workspace` browser bundle, so it
-owns the whole `sidebar.workspaces` region exactly as the shipped plugin does
-(same search, view options, drag, dialogs, row menu and row actions). Because it
-replaces that bundle, it also **provides the `uiWorkspace` client service** — the
-one the conversation input/composer, chat rows, sidebar decorations, agent-preset
-menus and directory pickers inject. Any code replacement of this plugin therefore
-touches every one of those consumers; see "Updating while the app is running".
-The patch is a small, deterministic edit of that bundle:
+![工作区行悬停时的归档按钮](docs/preview-archive.png)
 
-- `deriveGroups` builds one synthetic leading group keyed `__pinned__` holding the
-  Host pin set in pin order and filters those rows out of their workspace group;
-- the section never applies the per-group row watermark, so every pinned row stays
-  visible;
-- its header shows the pin glyph, cannot be dragged, and carries no workspace
-  actions (rename / delete / new session);
-- pinned rows are not reorderable by drag: their order follows the Host pin order;
-- a new locale key `group.pinned` supplies 置顶 / Pinned;
-- each workspace row gains a hover archive button between its "..." menu and its
-  new-Session button, rendered only while the workspace has archiveable Sessions.
-  It archives every ordinary, unarchived, **unpinned** Session in that workspace
-  through the shared archive action; archived rows, the New Session draft, subagent
-  children and pinned rows are left alone, and a running Session is counted and
-  reported as skipped rather than stopped. The result appears in the sidebar's
-  Workspace notice.
+*图：鼠标移到工作区行时出现的归档按钮，提示为「归档全部会话（保留置顶）」。*
 
-### Why pinned Sessions are excluded from the bulk archive
+## 功能说明
 
-Pinning and archival are mutually exclusive on the Host: `archiveSession` drops the
-Session from the pin set in the same durable write, and an archived Session cannot
-be re-pinned. A pinned row also no longer renders inside its workspace group (this
-fork lifts it to the top section), so a bulk click on that group would archive and
-unpin a row the user cannot even see there. The bulk target rule therefore filters
-the pin set, and the row's hover button counts its targets through the same rule, so
-a workspace whose only remaining Sessions are pinned shows no button at all. Archiving
-a pinned row is still possible one row at a time from its own menu — an explicit
-choice about that row. A Session pinned while the click is running is re-checked
-before each Host call and left alone.
+置顶会话拥有独立的「置顶」分区，位于侧边栏最上方、所有工作区分组之前：内容就是 Host 的置顶集合，最近置顶的排在前面。
 
-Everything else is the upstream bundle, verbatim.
+置顶行会离开它所属的工作区分组，因此不需要展开或滚动工作区就能看到；取消置顶后，该行回到工作区顺序规定的位置。运行状态本身不会移动行——只有置顶会。
 
-## Tests
+工作区行悬停时还会出现「归档全部会话（保留置顶）」按钮：一次点击归档该工作区下所有普通会话，同时保留其中的置顶会话。
+
+## 实现方式
+
+这是官方 `@deepseek-ai/dsh-client-ui-workspace` 浏览器 bundle 的一个 fork，因此和官方插件一样完整接管 `sidebar.workspaces` 区域（相同的搜索、视图选项、拖拽、对话框、行菜单与行操作）。由于替换了该 bundle，它同时**提供 `uiWorkspace` 客户端服务**——会话输入框/编辑器、聊天行、侧边栏装饰、agent-preset 菜单和目录选择器都在 inject 这个服务。因此替换本插件的代码会牵动上述每一个使用方，参见「在应用运行时更新」。
+
+补丁是对该 bundle 的一处小而确定的修改：
+
+- `deriveGroups` 生成一个合成的前置分组（key 为 `__pinned__`），按置顶顺序容纳 Host 的置顶集合，并把这些行从各自的工作区分组中过滤掉；
+- 该分区不应用每个分组的行水位线，所以所有置顶行始终可见；
+- 分区标题显示置顶图标，不可拖拽，也不带工作区操作（重命名 / 删除 / 新建会话）；
+- 置顶行不能通过拖拽调整顺序：顺序跟随 Host 的置顶顺序；
+- 新增 locale key `group.pinned`，提供「置顶」文案；
+- 每个工作区行在「...」菜单与「新建会话」按钮之间新增一个悬停出现的归档按钮，仅当该工作区存在可归档会话时渲染。它通过共享的归档操作归档该工作区里所有普通、未归档、**未置顶**的会话；已归档行、新建会话草稿、子代理子会话和置顶行都不动；正在运行的会话会被计数并作为「跳过」上报，而不是被停止。结果显示在侧边栏的 Workspace 通知里。
+
+### 为什么批量归档排除置顶会话
+
+在 Host 上，置顶与归档互斥：`archiveSession` 会在同一次持久化写入里把该会话从置顶集合中移除，而归档的会话无法重新置顶。此外，置顶行已不再渲染在它所属的工作区分组里（本 fork 把它提到顶部分区），如果对那个分组批量归档，会归档并取消置顶一条用户在该分组里根本看不到的行。因此批量归档的目标规则会过滤置顶集合；行上的悬停按钮也用同一规则统计目标，所以一个只剩置顶会话的工作区不会显示按钮。要归档某条置顶行，仍可从它自己的菜单逐条操作——那是对该行的明确选择。点击执行期间被置顶的会话，会在每次调用 Host 前重新检查并被跳过。
+
+其余部分与上游 bundle 完全一致。
+
+## 测试
 
 ```sh
 node test/groups.test.mjs
 ```
 
-Covers the synthetic section against the compiled fork: pin ordering, collapsed
-workspaces and collapsed section, archive filtering, missing ids, rows returned to
-their groups, and that running state alone never lifts a row. It also pins the
-one-click archive membership rule: archived rows, blank drafts, subagent children,
-pinned rows and members without a loaded summary are excluded; the hover button's
-count is derived from that same rule, so a workspace with nothing but pinned rows
-shows no button.
+覆盖编译后 fork 的合成分区：置顶顺序、折叠的工作区与折叠的分区、归档过滤、缺失的 id、行回到各自分组，以及运行状态本身绝不会把行提上来。也固定了一键归档的成员规则：已归档行、空白草稿、子代理子会话、置顶行和没有加载摘要的成员都排除；悬停按钮的计数由同一规则推导，所以只有置顶行的工作区不显示按钮。
 
-## Install
+## 安装
 
-Installed as a profile bundle; its patch disables the shipped `ui-workspace` row
-and inserts this fork, so the two never register the same slots twice.
+作为 profile bundle 安装；它的 patch 会禁用官方 `ui-workspace` 行并插入本 fork，因此两者不会重复注册同一批 slot。
 
-## Rebuild after a DeepSeek Harness update
+## DSH 升级后重建
 
-The fork embeds a copy of the shipped Client bundle, which changes with the app.
-After updating the desktop app, regenerate it against the new installation:
+fork 内嵌了一份官方 Client bundle 的副本，它随应用变化。更新桌面应用后，针对新安装重新生成：
 
 ```sh
 node build/fork.mjs
 ```
 
-The script reads `app.asar` directly and fails loudly if an upstream anchor moved,
-instead of shipping a half-patched sidebar. If an anchor is reported missing, diff
-the new shipped `lib/client.js` around that spot and update `build/fork.mjs`.
+脚本直接读取 `app.asar`，上游锚点（anchor）移动时会明确报错，而不是发布一个只打了一半补丁的侧边栏。如果报某个锚点缺失，请对比新版 `lib/client.js` 中对应的位置并更新 `build/fork.mjs`。
 
-## Updating while the app is running
+## 在应用运行时更新
 
-This plugin is not a leaf decoration: it replaces the shipped workspace browser and
-is the provider of the `uiWorkspace` client service, which the conversation
-input/composer (`ui-conversation`), chat rows (`ui-chat`), sidebar, schedule,
-agent-preset and directory-picker plugins all declare in `inject`. Replacing its code
-therefore tears those consumers down and re-creates them. That is the mechanism
-behind "改一下侧栏，对话框/输入框就没了".
+本插件不是边缘装饰：它替换官方的 workspace 浏览器，并且是 `uiWorkspace` 客户端服务的提供方；会话输入框/编辑器（`ui-conversation`）、聊天行（`ui-chat`）、侧边栏、定时任务、agent-preset 和目录选择器插件都在 `inject` 中声明了它。因此替换它的代码会拆掉这些使用方再重新创建。这正是「改一下侧栏，对话框/输入框就没了」背后的机制。
 
-`lib/client.js` is served by the running Harness, and the client HMR watcher
-stat-polls the artifact of every enabled graph row roughly every 500 ms. Rewriting it
-while the row is **enabled** publishes a `rebuilt` frame, which the page applies as
-an **in-place code swap**: the old fiber is drained and the new bundle mounted.
-Current DSH releases re-cascade the dependents through Cordis' activation epochs
-(`dsh-client-hmr`, "Cascade and self-reload"), so the injecting views come back with
-the new plugin. A failed import or activation has **no rollback**, so a broken build
-leaves the page broken.
+`lib/client.js` 由运行中的 Harness 提供，客户端 HMR watcher 大约每 500 ms 轮询每个已启用 graph 行的产物文件。在该行**启用**时重写它会发布一个 `rebuilt` 帧，页面把它当作**原地代码替换**应用：旧的 fiber 被排空，新 bundle 挂载。当前 DSH 版本会通过 Cordis 的激活 epoch 重新级联依赖（`dsh-client-hmr`，「Cascade and self-reload」），所以注入它的视图会带着新插件回来。导入或激活失败**没有回滚**，因此坏构建会把页面弄坏。
 
-### Publishing procedures
+### 发布流程
 
-1. **Page closed (deterministic, preferred).** Rebuild with no page open, then open
-   or reload the page. No swap is published, so no consumer is torn down. Sessions
-   keep running on the Host while the page is closed.
-2. **Page open, row enabled (ordinary HMR rebuild).** Write the artifact and let the
-   watcher swap it. Dependents re-cascade and the composer remounts; React state
-   inside the reloaded plugins is lost (Session, workspace and draft data are not).
-   Verify the build and `test/groups.test.mjs` first, because a bad swap is not
-   rolled back.
+1. **页面关闭（确定性，首选）。** 在没有打开页面时重建，然后再打开或刷新页面。不会发布替换，也就不会拆掉使用方。页面关闭期间会话仍在 Host 上运行。
+2. **页面打开、行启用（普通 HMR 重建）。** 写入产物并让 watcher 替换。依赖重新级联，输入框重新挂载；被重载插件里的 React 状态会丢失（会话、工作区和草稿数据不会）。请先验证构建和 `test/groups.test.mjs`，因为坏替换不会回滚。
 
-Never publish by disabling the row, rebuilding, then enabling it. The watcher does
-not track a disabled row, so no `rebuilt` frame is published — but re-enabling is an
-ordinary graph change, and DSH documents that replacing package code together with
-its existing consumers is *outside* ordinary enable/disable synchronization
-(`dsh-client-modules`, "Known limitations"). On 2026-11-04 that sequence left the
-composer unmounted until the page was rebooted. Shipping the change as a new bundle
-version is a graph change of the same kind: fine for installation, not a better way
-to iterate on this fork.
+绝不要用「禁用行 → 重建 → 再启用」的方式发布。watcher 不跟踪已禁用行，因此不会发布 `rebuilt` 帧——但重新启用属于普通 graph 变更，而 DSH 明确说明：替换包代码并连同其现有使用方一起替换，属于普通启用/禁用同步*之外*的行为（`dsh-client-modules`，「Known limitations」）。2026-11-04 那次操作让输入框一直未挂载，直到页面重启才恢复。把改动作为新 bundle 版本发布属于同一类 graph 变更：适合安装，但不是迭代本 fork 的更好方式。
 
-### Recovering a page that lost its composer
+### 找回丢失输入框的页面
 
-1. **Reload the page (Cmd+R).** A fresh boot rebuilds the whole client plugin tree,
-   including every `uiWorkspace` consumer. No app restart and no Session loss.
-2. If the reloaded page still boots without the composer, do **not** restart the app
-   yet: open Settings → Plugins → Plugin list (it shows page-local synchronization
-   failures and retries them without changing Host enablement) and capture what it
-   reports — a restart destroys the evidence.
-3. Restart the app only when both fail.
+1. **刷新页面（Cmd+R）。** 全新的启动会重建整个客户端插件树，包括每个 `uiWorkspace` 使用方。不需要重启应用，也不会丢失会话。
+2. 如果刷新后的页面仍然没有输入框，**先不要**重启应用：打开 设置 → 插件 → 插件列表（它会显示页面级的同步失败，并在不改变 Host 启用状态的情况下重试），记录它报告的内容——重启会销毁证据。
+3. 只有当上面两步都失败时才重启应用。
 
-`node build/fork.mjs` writes atomically (temp file + rename) so a poll never
-publishes a half-written bundle, and it restates the rules above after every build.
+`node build/fork.mjs` 以原子方式写入（临时文件 + rename），所以轮询永远不会发布写了一半的 bundle；并且每次构建后都会重述上面的规则。
 
-## Uninstall / revert
+## 卸载 / 还原
 
-Remove the bundle (Plugins page, or `plugin_manager` `remove_bundle`); the patch
-layer disappears with it, the shipped `ui-workspace` row activates again, and the
-sidebar returns to the shipped grouping.
+移除该 bundle（插件页，或 `plugin_manager` 的 `remove_bundle`）；patch 层随之消失，官方 `ui-workspace` 行重新激活，侧边栏回到官方分组。

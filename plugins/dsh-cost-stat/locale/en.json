@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Task Cost",
+    "description": "Estimates the current Session model spend with DeepSeek pricing, cumulative under the composer and per-turn at each reply."
+  }
+}

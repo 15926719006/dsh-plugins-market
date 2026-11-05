@@ -2,6 +2,12 @@
 
 把 OpenCode Go 订阅的**剩余额度**放到 Harness Web 页面的左下角：侧栏底部 Settings 旁的一个小徽章，一眼看到最紧的那个窗口还剩多少；点开是一张悬浮面板，列出滚动（5 小时）、每周、每月三个窗口的已用 / 剩余百分比与重置时间。
 
+## 效果图
+
+![OpenCode Go 额度效果图](docs/preview.png)
+
+*图：左下角 Settings 旁的 `Go 92%` 徽章；点开后是滚动（5 小时）、每周、每月三个窗口的剩余 / 已用百分比、重置时间与进度条。*
+
 ## 为什么是这个位置
 
 `sidebar.footer.action` 槽位就是"页面左下角、Settings 旁边"这一个座位。它不占用侧栏导航项，也不进输入框，和已有按钮同高同风格；侧栏收起成 56px 轨道时（`wide === false`）只留圆环，百分比进 title。
@@ -36,13 +42,15 @@ opencode.ai 订阅用量接口
 | 刷新 | 关闭面板时 5 分钟一次；打开后 60 秒一次；面板内 `↻` 手动刷新；刷新失败时保留上次数字并在面板脚注标注「显示上次结果」 |
 | 交互 | 点击开合，`Esc` 或点击面板外关闭，面板锚定在徽章上方并自动避让视口边缘 |
 
-## 安装（desktop profile）
+## 安装
+
+在「插件 → 发现」里添加索引源 `https://15926719006.github.io/dsh-plugins-market/index.json`，搜索「OpenCode Go 额度」点安装即可；也可以直接用 Git 源安装：
 
 ```sh
-dsh plugin --profile desktop add /Users/maka.li/Documents/deepseek-harness/default-workspace/dsh-opencode-quota
+dsh plugin --profile desktop add "git+https://github.com/15926719006/dsh-plugins-market.git#main&path:/plugins/dsh-opencode-quota"
 ```
 
-本会话里通过 `plugin_manager` 以本地目录安装；安装后刷新页面，左下角 Settings 旁出现 `Go NN%`。
+安装后刷新页面，左下角 Settings 旁出现 `Go NN%`。
 
 ## 配置
 

@@ -1,0 +1,3 @@
+- insert:
+    - id: cost-stat
+      name: '@local/cost-stat'

@@ -19,6 +19,7 @@
     "icon.svg",
     "build/fork.mjs",
     "README.md",
+    "docs/*.png",
     "test/groups.test.mjs"
   ],
   "dsh": {

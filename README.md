@@ -20,6 +20,9 @@ https://15926719006.github.io/dsh-plugins-market/index.json
 | 任务完成通知（Task Notify） | 任务跑完、出错或被打断，或智能体停下来等你回答/审批时，弹一条 macOS 电脑通知 |
 | OpenCode Go 额度（OpenCode Go Quota） | 在侧栏底部显示 OpenCode Go 订阅剩余额度，点开查看滚动 / 每周 / 每月三个窗口 |
 | 插件导出（Plugin Export） | 把已安装的插件打包成一个可分享、可直接安装的 `.tgz`，并自动复制安装说明 |
+| 任务花费（Task Cost） | 按 **DeepSeek 计费标准**（高峰/空闲、缓存命中/未命中分别计价）估算当前会话的模型调用花费：输入框下方显示会话累计，每条回复底部显示本轮金额 |
+
+每个插件的详情页都会展示它自己的 README，开头是真实运行界面截图（`docs/*.png`），点开条目就能先看到效果再决定装不装。
 
 ---
 
@@ -61,7 +64,8 @@ dsh-plugins-market/
 │   ├── dsh-plugin-export/                # 插件源码（package.json 原样保留）
 │   ├── dsh-pinned-top/
 │   ├── dsh-task-notify/
-│   └── dsh-opencode-quota/
+│   ├── dsh-opencode-quota/
+│   └── dsh-cost-stat/
 ├── plugins.json                          # 索引的展示元数据：标题/描述/分类/关键词等
 ├── scripts/
 │   ├── build-index.mjs                   # 生成 site/index.json（无第三方依赖）

@@ -48,6 +48,12 @@
           "en": "Quota",
           "zh": "额度"
         }
+      },
+      "cost": {
+        "title": {
+          "en": "Cost",
+          "zh": "费用"
+        }
       }
     },
     "sortKeys": {
@@ -151,6 +157,31 @@
       ],
       "sortKeys": {
         "recommended": 70
+      }
+    },
+    "dsh-cost-stat": {
+      "title": {
+        "en": "Task Cost",
+        "zh": "任务花费"
+      },
+      "description": {
+        "en": "Estimates the model spend of the current Session using DeepSeek's published pricing: peak/off-peak and cached/uncached input are priced separately, with per-turn and cumulative amounts.",
+        "zh": "按 DeepSeek 计费标准估算当前会话的模型调用花费：输入/输出、缓存命中/未命中、高峰/空闲分别计价，输入框下方显示累计、每条回复底部显示本轮金额。"
+      },
+      "category": "tools",
+      "labels": [
+        "cost"
+      ],
+      "keywords": [
+        "cost",
+        "price",
+        "token",
+        "deepseek",
+        "spend",
+        "billing"
+      ],
+      "sortKeys": {
+        "recommended": 60
       }
     }
   }
