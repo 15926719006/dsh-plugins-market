@@ -2,11 +2,13 @@
 
 个人维护的 DSH 插件集合，通过 GitHub Pages 发布一份 **Plugin Market Index Format 1** 索引，DSH 可以直接把这份索引添加为「索引源」，浏览并安装下面的插件。
 
-索引地址（把 `OWNER` 换成你的 GitHub 用户名或组织名）：
+索引地址（已经发布，直接复制这条）：
 
 ```text
-https://OWNER.github.io/dsh-plugins-market/index.json
+https://15926719006.github.io/dsh-plugins-market/index.json
 ```
+
+仓库：https://github.com/15926719006/dsh-plugins-market
 
 > 地址必须带上 `/index.json`。GitHub Pages 对目录地址会返回 301 跳转，而 DSH 抓取索引时**不跟随重定向**，目录地址会被判为失败。
 
@@ -30,14 +32,14 @@ DSH **没有内置默认索引源**，所以每个人只需要手动添加一次
 3. 点击 **添加索引源**，粘贴上面的索引地址，例如：
 
    ```text
-   https://OWNER.github.io/dsh-plugins-market/index.json
+   https://15926719006.github.io/dsh-plugins-market/index.json
    ```
 
 4. 保存后回到 **发现**，就能看到上面这些插件；点开插件、选择版本后点击 **安装**。
 
 安装行为说明：
 
-- 索引里的版本都指向 **Git 源 + 固定 commit**（`git+https://github.com/OWNER/dsh-plugins-market.git#<commit>&path:/plugins/<目录>`），DSH 交给 pnpm 安装，因此每个插件安装到的就是索引里写死的那个 commit，不会漂移。
+- 索引里的版本都指向 **Git 源 + 固定 commit**（`git+https://github.com/15926719006/dsh-plugins-market.git#<commit>&path:/plugins/<目录>`），DSH 交给 pnpm 安装，因此每个插件安装到的就是索引里写死的那个 commit，不会漂移。
 - 作者发布新版本后，索引里的版本号会更新，DSH 会把它标成「有新版本」；但发现页**没有一键升级**，升级要先在「已安装」里卸载，再从发现页安装一次。
 - 这些插件包都保持 `"private": true`，**没有发布到 npm**，安装时不经过 npm registry；DSH 只从 GitHub 拉这个 commit。
 
@@ -76,7 +78,7 @@ dsh-plugins-market/
 1. 把 `dsh-plugins-market/` 作为仓库根目录推送到 GitHub，**仓库必须设为 Public**（GitHub Pages 免费版只对公开仓库开放；而且别人从「发现」页安装时 pnpm 在清理过的环境里跑，拿不到你的 token，私有仓库装不了）。仓库名用 `dsh-plugins-market`，默认分支 `main`。
 2. 在仓库 **Settings → Pages → Build and deployment** 里把 **Source** 设为 **GitHub Actions**。
 3. 推送后 `.github/workflows/publish-index.yml` 会自动运行：构建 `site/index.json` → 上传 Pages artifact → 部署。
-4. 部署完成后索引地址就是 `https://OWNER.github.io/dsh-plugins-market/index.json`。
+4. 部署完成后索引地址就是 `https://15926719006.github.io/dsh-plugins-market/index.json`。
 5. 在仓库 **Settings → Topics** 里加上 **`dsh-plugin`**（见下方「第三方目录」）。
 
 ### 发布新版本
@@ -105,11 +107,11 @@ npx serve site         # 需要本地起静态服务时：http://localhost:3000/
 ```bash
 npm install
 node scripts/build-index.mjs \
-  --repo https://github.com/OWNER/dsh-plugins-market \
+  --repo https://github.com/15926719006/dsh-plugins-market \
   --commit 0123456789abcdef0123456789abcdef01234567
 npm run validate
 # 校验真实地址：
-npm run validate -- https://OWNER.github.io/dsh-plugins-market/index.json
+npm run validate -- https://15926719006.github.io/dsh-plugins-market/index.json
 ```
 
 ### 新增插件
