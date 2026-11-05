@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-task-notify",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Desktop notification when an agent turn finishes or when the agent waits for your answer.",
