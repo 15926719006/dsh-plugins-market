@@ -343,7 +343,7 @@ async function main() {
   let sha = git(['rev-parse', 'HEAD']).trim()
   if (dev) {
     log('\n[5/7] 跳过发布（--dev）')
-    await installLocally({ name: manifest.name, spec: `link:${destination}`, profile, origin, indexUrl })
+    await installLocally({ name: manifest.name, spec: destination, profile, origin, indexUrl })
     log('\n完成：本地 link 安装已更新，改代码刷新页面即可看到效果')
     return
   }
