@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Task Notify",
+    "description": "Pops a macOS notification when an agent turn finishes, fails or is interrupted, and when the agent is blocked waiting for your answer or approval — so a task you started in another window is never missed."
+  }
+}

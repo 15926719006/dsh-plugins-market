@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plugin export",
+    "description": "Adds an Export plugin action to each Plugins page so a bundle can be shared as one .tgz with install instructions."
+  }
+}

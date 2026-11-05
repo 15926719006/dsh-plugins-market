@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Plugin export">
+  <rect width="64" height="64" rx="14" fill="#EDF3FB"/>
+  <path d="M32 15v18m0 0 7.5-7.5M32 33l-7.5-7.5" fill="none" stroke="#2F6FD0" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 36v9.5A2.5 2.5 0 0 0 20.5 48h23a2.5 2.5 0 0 0 2.5-2.5V36" fill="none" stroke="#2F6FD0" stroke-width="3.6" stroke-linecap="round"/>
+  <rect x="24" y="52" width="16" height="3.2" rx="1.6" fill="#2F6FD0" opacity="0.35"/>
+</svg>

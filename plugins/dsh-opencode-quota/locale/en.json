@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OpenCode Go Quota",
+    "description": "Shows the remaining OpenCode Go subscription quota at the bottom-left of the page, beside Settings in the sidebar foot; open it for the rolling (5h), weekly and monthly windows with usage, remaining percentage and reset times."
+  }
+}

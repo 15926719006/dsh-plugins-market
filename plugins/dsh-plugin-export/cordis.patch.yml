@@ -1,0 +1,5 @@
+# Adds the "导出插件 / Export plugin" action to every installed bundle's Plugins
+# detail page, backed by the Host download route the package registers.
+- insert:
+    - id: plugin-export
+      name: '@local/dsh-plugin-export'

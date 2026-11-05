@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Pinned on top",
+    "description": "Lifts pinned sessions into a Pinned section at the very top of the sidebar, above every workspace group, and adds one-click archive for every session under a workspace row."
+  }
+}

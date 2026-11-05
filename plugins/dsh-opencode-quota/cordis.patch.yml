@@ -1,0 +1,6 @@
+# Bundle patch: one Host row resolving the OpenCode Go credential and serving
+# GET /plugins/opencode-quota/usage, plus the browser half declared through
+# package.json's dsh.client section.
+- insert:
+    - id: opencode-quota
+      name: '@local/dsh-opencode-quota'
