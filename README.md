@@ -69,7 +69,9 @@ dsh-plugins-market/
 ├── plugins.json                          # 索引的展示元数据：标题/描述/分类/关键词等
 ├── scripts/
 │   ├── build-index.mjs                   # 生成 site/index.json（无第三方依赖）
-│   └── validate-index.mjs                # 用官方校验器校验 site/index.json
+│   ├── validate-index.mjs                # 用官方校验器校验 site/index.json
+│   ├── publish.mjs                       # 一条龙：同步→递增→构建→推送→等待→装回本机
+│   └── lib/dsh-api.mjs                   # 调运行中 DSH 的本地 API（签 browser cookie）
 ├── package.json                          # 私有包，devDependency 只有官方校验器
 ├── .gitignore
 └── README.md
@@ -85,14 +87,39 @@ dsh-plugins-market/
 4. 部署完成后索引地址就是 `https://15926719006.github.io/dsh-plugins-market/index.json`。
 5. 在仓库 **Settings → Topics** 里加上 **`dsh-plugin`**（见下方「第三方目录」）。
 
-### 发布新版本
+### 一条龙发布（推荐）
 
-1. 改插件代码，然后把 `plugins/<目录>/package.json` 里的 `version` 递增（SemVer）。
-2. 提交并推送到 `main`。
-3. GitHub Actions 重新生成 `site/index.json` 并部署 Pages；索引里的版本号和 commit 会同步更新。
-4. 在 DSH 里重新安装对应插件即可完成升级。
+```sh
+node scripts/publish.mjs <插件目录名> --bump patch      # 例：node scripts/publish.mjs dsh-task-notify --bump patch
+```
 
-> 索引每次只带**当前这一个版本**（指向本次提交），所以改版本号后旧版本会从索引里消失；已经装过旧版本的人会看到「有新版本」，按上面的方式卸载再装即可。每个版本号只需在同一个索引里唯一，递增只是为了让「已安装 / 有新版本」判断正确。
+它按顺序做完：同步文件 → 补 `plugins.json` 展示信息（新插件从 `locale/zh.json` 的 meta 生成）→ 递增版本 → 构建并校验索引 → 提交推送 → 等 Actions 和 Pages → **卸载旧版、从新 commit 装回本机运行的 DSH**。
+
+常用变体：
+
+| 命令 | 作用 |
+| --- | --- |
+| `node scripts/publish.mjs <名> --bump minor` | 递增 minor / major 同理 |
+| `node scripts/publish.mjs --from ~/Desktop/work/dsh-new --bump patch` | 把一个还没进仓库的插件目录收进来并发布 |
+| `node scripts/publish.mjs <名> --dev` | 不发布，只把 `plugins/<名>` 以本地 link 方式装进 DSH（改代码刷新即生效） |
+| `node scripts/publish.mjs <名> --no-push` | 只构建 + 校验，不提交不推送 |
+| `node scripts/publish.mjs <名> --dry-run` | 打印计划，不提交、不推送、不安装 |
+| `node scripts/publish.mjs <名> --no-install` | 发布但不装到本机 |
+
+安装这一步走的是运行中 DSH 的本地 API（自动从 `lsof` 找端口，或用 `--origin http://127.0.0.1:<端口>` 指定；profile 默认 `desktop`，可用 `--profile` 覆盖），所以脚本跑完本机就是最新版，不用回 UI 点。
+
+发出去之后，别人那边有几段延迟：Actions 构建 + Pages 部署约 1 分钟，DSH 抓索引有 **10 分钟缓存**（发现页点刷新可立即拉），看到的是「有新版本」；DSH 目前没有一键升级，卸载再装才是新 commit。
+
+> 索引每次只带**当前这一个版本**（指向本次提交），所以改版本号后旧版本会从索引里消失；每个版本号只需在同一个索引里唯一，递增只是为了让「已安装 / 有新版本」判断正确。
+
+### 新插件从零开始
+
+1. 复制一个现有插件目录当模板（`plugins/dsh-task-notify` 最简：Host 入口 + client 入口 + `cordis.patch.yml` + `locale/` + `icon.svg` + `docs/preview.png`）。
+2. 改 `package.json` 的 `name`、`cordis.patch.yml` 里的行 id、`locale/*.json` 的标题描述、README（`## 效果图` 放真实截图）。
+3. 本地调：`node scripts/publish.mjs <目录名> --dev`，刷新页面看效果。
+4. 定稿：`node scripts/publish.mjs <目录名> --bump patch`，一条龙发布并装回本机。
+
+> 规格：`package.json` 必须有 `dsh.bundle.patch`；声明 `dsh.client` 时要有 `exports["./client"]` 指向已构建入口；`files` 里要包含 `cordis.patch.yml`、`docs/*.png` 等要发布的文件（脚本会补 `docs/*.png`）。仓库根目录和插件包都不要有 `prepare`/`install` 之类的构建脚本，否则 pnpm 11 会要求逐个批准。
 
 ### 本地预览
 

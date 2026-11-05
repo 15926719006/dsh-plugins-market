@@ -6,7 +6,8 @@
   "description": "Personal DSH plugin market index: holds the plugins and builds the format-1 index.json served by GitHub Pages.",
   "scripts": {
     "build": "node scripts/build-index.mjs && node scripts/validate-index.mjs",
-    "validate": "node scripts/validate-index.mjs"
+    "validate": "node scripts/validate-index.mjs",
+    "publish": "node scripts/publish.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-plugin-market-index": "0.2.2-rc.1"

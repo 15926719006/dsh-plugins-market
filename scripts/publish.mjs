@@ -208,16 +208,18 @@ async function waitForRun(owner, repo, sha) {
     await new Promise((done) => setTimeout(done, 8000))
   }
   if (run === undefined) return { waited: false }
+  const runId = run.databaseId
   while (Date.now() < deadline) {
+    let view
     try {
-      run = JSON.parse(execFileSync('gh', ['run', 'view', String(run.databaseId), '--repo', `${owner}/${repo}`, '--json', 'status,conclusion'], { encoding: 'utf8' }))
-    } catch {
-      return { waited: false, runId: run.databaseId }
+      view = JSON.parse(execFileSync('gh', ['run', 'view', String(runId), '--repo', `${owner}/${repo}`, '--json', 'status,conclusion'], { encoding: 'utf8' }))
+    } catch (error) {
+      return { waited: false, runId, note: String(error?.message ?? error).slice(0, 200) }
     }
-    if (run.status === 'completed') return { waited: true, runId: run.databaseId, conclusion: run.conclusion }
+    if (view.status === 'completed') return { waited: true, runId, conclusion: view.conclusion }
     await new Promise((done) => setTimeout(done, 8000))
   }
-  return { waited: false, runId: run.databaseId }
+  return { waited: false, runId }
 }
 
 async function indexShowsCommit(indexUrl, sha) {
