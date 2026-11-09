@@ -201,19 +201,35 @@ test('the Client half registers one locale namespace and one sidebar-foot chip',
   assert.equal(typeof registrations[0].component, 'function')
 })
 
-test('the chip summarizes the tightest remaining window', async () => {
+test('the chip previews the rolling (5h) window, never the monthly one', async () => {
   const { _internals } = await loadClientModule()
-  const summary = _internals.summarize({
-    rolling: { usedPercent: 0, remainingPercent: 100 },
-    weekly: { usedPercent: 2, remainingPercent: 98 },
-    monthly: { usedPercent: 1, remainingPercent: 99 },
-  })
-  assert.equal(summary.remaining, 98)
+  const windows = {
+    rolling: { usedPercent: 5, remainingPercent: 95, resetsAt: '2026-11-04T13:45:29.000Z' },
+    weekly: { usedPercent: 8, remainingPercent: 92, resetsAt: '2026-11-09T00:00:00.000Z' },
+    monthly: { usedPercent: 96, remainingPercent: 4, resetsAt: '2026-12-04T03:12:36.000Z' },
+  }
+  const summary = _internals.summarize(windows)
+  assert.equal(summary.remaining, 95, 'the chip must show the 5-hour window, not the tightest one')
   assert.equal(summary.severity, 'ok')
-  assert.deepEqual(_internals.summarize(null), { remaining: null, severity: 'idle' })
+  assert.equal(summary.resetsAt, '2026-11-04T13:45:29.000Z')
+  assert.deepEqual(_internals.summarize(null), { remaining: null, severity: 'idle', resetsAt: null })
+  assert.deepEqual(_internals.summarize({ weekly: { usedPercent: 99 } }), {
+    remaining: null,
+    severity: 'idle',
+    resetsAt: null,
+  })
   assert.equal(_internals.severityOf(9.4), 'error')
   assert.equal(_internals.severityOf(12), 'warn')
   assert.equal(_internals.severityOf(30), 'ok')
+})
+
+test('the chip reset clock is short for today and dated for another day', async () => {
+  const { _internals } = await loadClientModule()
+  const now = Date.parse('2026-11-04T12:00:00+08:00')
+  assert.equal(_internals.formatResetClock('2026-11-04T14:56:00+08:00', 'zh', now), '14:56')
+  assert.equal(_internals.formatResetClock('2026-11-05T00:00:00+08:00', 'zh', now), '11/05 00:00')
+  assert.equal(_internals.formatResetClock(undefined, 'zh', now), null)
+  assert.equal(_internals.formatResetClock('not-a-date', 'zh', now), null)
 })
 
 test('row models carry localized remaining, used and reset text', async () => {
@@ -279,6 +295,7 @@ test('non-finite percentages are treated as missing, not rendered as NaN', async
   assert.deepEqual(_internals.summarize({ rolling: { usedPercent: Number.NaN } }), {
     remaining: null,
     severity: 'idle',
+    resetsAt: null,
   })
 })
 

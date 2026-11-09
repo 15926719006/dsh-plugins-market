@@ -7,8 +7,9 @@
  * times.
  *
  * Numbers come from the Host route `GET /plugins/opencode-quota/usage`; the API
- * key stays in the Host process. The chip shows the *tightest* remaining window
- * so one glance answers "how much is left"; the popover carries the details.
+ * key stays in the Host process. The chip previews the rolling (5-hour) window —
+ * the one that refills fastest and therefore decides whether a heavy session can
+ * continue — and names the time it refreshes; the popover carries every window.
  */
 window.__ModuleLoader__.load({
   id: '@local/dsh-opencode-quota',
@@ -34,7 +35,9 @@ window.__ModuleLoader__.load({
 
     const zh = {
       'chip.label': 'Go',
-      'chip.title': 'OpenCode Go 剩余 {remaining}%',
+      'chip.title': 'OpenCode Go · 5 小时额度剩 {remaining}%',
+      'chip.reset': '{time} 刷新',
+      'chip.resetSoon': '即将刷新',
       'chip.unknown': 'OpenCode Go 额度',
       'panel.title': 'OpenCode Go 额度',
       'panel.refresh': '刷新',
@@ -58,7 +61,9 @@ window.__ModuleLoader__.load({
 
     const en = {
       'chip.label': 'Go',
-      'chip.title': 'OpenCode Go · {remaining}% left',
+      'chip.title': 'OpenCode Go · 5h quota {remaining}% left',
+      'chip.reset': 'resets {time}',
+      'chip.resetSoon': 'resets soon',
       'chip.unknown': 'OpenCode Go quota',
       'panel.title': 'OpenCode Go quota',
       'panel.refresh': 'Refresh',
@@ -162,25 +167,55 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Summarize the windows as the chip shows them: the tightest remaining
-     * window, so one glance answers "how much is left".
+     * Format one reset timestamp as the short clock the chip shows beside the
+     * percentage: `HH:mm` on the same day, `MM/DD HH:mm` otherwise.
+     * @param iso - the upstream timestamp.
+     * @param localeId - the active locale id.
+     * @param now - current epoch milliseconds.
+     * @returns the short local time, or null when unusable.
+     */
+    function formatResetClock(iso, localeId, now) {
+      if (typeof iso !== 'string') return null
+      const date = new Date(iso)
+      if (Number.isNaN(date.getTime())) return null
+      const reference = new Date(typeof now === 'number' && Number.isFinite(now) ? now : Date.now())
+      const sameDay =
+        date.getFullYear() === reference.getFullYear() &&
+        date.getMonth() === reference.getMonth() &&
+        date.getDate() === reference.getDate()
+      try {
+        return new Intl.DateTimeFormat(dictOf(localeId) === zh ? 'zh-CN' : 'en-US', {
+          ...(sameDay ? {} : { month: '2-digit', day: '2-digit' }),
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(date)
+      } catch {
+        return date.toISOString()
+      }
+    }
+
+    /**
+     * Summarize the windows as the chip previews them: the rolling (5-hour)
+     * window only. It is the fastest window to refill, so it decides whether a
+     * long session can keep going; the other windows stay in the popover.
      * @param windows - projected windows from the Host route, or null.
-     * @returns the remaining percentage and its severity bucket.
+     * @returns the remaining percentage, its severity bucket and the reset time.
      */
     function summarize(windows) {
-      let tightest = null
-      if (windows !== null && windows !== undefined) {
-        for (const key of WINDOW_KEYS) {
-          const entry = windows[key] === undefined || windows[key] === null ? null : windows[key]
-          const used = entry === null ? null : entry.usedPercent
-          if (typeof used !== 'number' || !Number.isFinite(used)) continue
-          const remaining = Math.max(0, Math.min(100, 100 - used))
-          if (tightest === null || remaining < tightest) tightest = remaining
-        }
-      }
+      const rolling = windows === null || windows === undefined ? null : windows.rolling
+      const entry = rolling === null || typeof rolling !== 'object' ? {} : rolling
+      const used = entry.usedPercent
+      const remaining =
+        typeof used === 'number' && Number.isFinite(used)
+          ? Math.max(0, Math.min(100, 100 - used))
+          : typeof entry.remainingPercent === 'number' && Number.isFinite(entry.remainingPercent)
+            ? Math.max(0, Math.min(100, entry.remainingPercent))
+            : null
       return {
-        remaining: tightest === null ? null : Math.round(tightest),
-        severity: severityOf(tightest),
+        remaining: remaining === null ? null : Math.round(remaining),
+        severity: severityOf(remaining),
+        resetsAt: typeof entry.resetsAt === 'string' ? entry.resetsAt : null,
       }
     }
 
@@ -229,8 +264,8 @@ window.__ModuleLoader__.load({
      * @returns one element per window.
      */
     function buildRowElements(models, t) {
-      return models.map((row) =>
-        h(
+      return models.flatMap((row, index) => {
+        const element = h(
           'div',
           { key: row.key, className: 'oq-row' },
           h(
@@ -254,8 +289,11 @@ window.__ModuleLoader__.load({
             row.resetText === null ? null : ` · ${t('window.reset', { time: row.resetText })}`,
             row.statusText === null ? null : ` · ${row.statusText}`,
           ),
-        ),
-      )
+        )
+        return index === 0
+          ? [element]
+          : [h('div', { key: `sep-${row.key}`, className: 'oq-sep' }), element]
+      })
     }
 
     /**
@@ -420,7 +458,7 @@ window.__ModuleLoader__.load({
           const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
           setPlacement({
             left,
-            bottom: Math.max(8, window.innerHeight - rect.top + 8),
+            bottom: Math.max(8, window.innerHeight - rect.top + 4),
             width,
             maxHeight: Math.max(120, Math.min(rect.top - 16, window.innerHeight - 24)),
           })
@@ -459,14 +497,24 @@ window.__ModuleLoader__.load({
         const severity = summary.severity
         const narrow = props.wide === false
         const stale = snapshot.phase === 'error'
+        const now = Date.now()
+        const resetAt = summary.resetsAt === null ? Number.NaN : Date.parse(summary.resetsAt)
+        const resetDue = Number.isFinite(resetAt) && resetAt <= now
+        const resetClock = resetDue ? null : formatResetClock(summary.resetsAt, localeId, now)
+        const resetText = resetDue
+          ? t('chip.resetSoon')
+          : resetClock === null
+            ? null
+            : t('chip.reset', { time: resetClock })
         const chipTitle =
           (rounded === null ? t('chip.unknown') : t('chip.title', { remaining: rounded })) +
+          (resetText === null ? '' : ` · ${resetText}`) +
           (stale ? ` · ${t('panel.error')}` : '')
-        // The 56px rail has no room for the label: keep the ring, the tooltip
-        // and the popover, and drop the text.
+        // The 56px rail has no room for the label or the reset clock: keep the
+        // ring, the tooltip and the popover, and drop the text.
         const chipText = narrow ? null : rounded === null ? t('chip.label') : `${t('chip.label')} ${rounded}%`
 
-        const ringRadius = 5.4
+        const ringRadius = 6.2
         const ringLength = 2 * Math.PI * ringRadius
         const ringArc = rounded === null ? 0 : (rounded / 100) * ringLength
         const ring = h(
@@ -474,31 +522,31 @@ window.__ModuleLoader__.load({
           {
             key: 'ring',
             className: 'oq-ring',
-            viewBox: '0 0 14 14',
-            width: 14,
-            height: 14,
+            viewBox: '0 0 16 16',
+            width: 16,
+            height: 16,
             'aria-hidden': 'true',
             focusable: 'false',
           },
           h('circle', {
-            cx: 7,
-            cy: 7,
+            cx: 8,
+            cy: 8,
             r: ringRadius,
             fill: 'none',
             stroke: 'currentColor',
-            strokeOpacity: 0.22,
-            strokeWidth: 2.4,
+            strokeOpacity: 0.2,
+            strokeWidth: 2.2,
           }),
           h('circle', {
-            cx: 7,
-            cy: 7,
+            cx: 8,
+            cy: 8,
             r: ringRadius,
             fill: 'none',
             stroke: 'currentColor',
-            strokeWidth: 2.4,
+            strokeWidth: 2.2,
             strokeLinecap: 'round',
             strokeDasharray: `${ringArc} ${ringLength - ringArc}`,
-            transform: 'rotate(-90 7 7)',
+            transform: 'rotate(-90 8 8)',
           }),
         )
 
@@ -520,6 +568,7 @@ window.__ModuleLoader__.load({
           },
           ring,
           chipText === null ? null : h('span', { className: 'oq-chip-text' }, chipText),
+          resetText === null || narrow ? null : h('span', { className: 'oq-chip-reset' }, resetText),
         )
 
         const rows = buildRowElements(rowModels(windows, t, localeId), t)
@@ -552,41 +601,45 @@ window.__ModuleLoader__.load({
     }
 
     const CSS = `
-.oq-chip{box-sizing:border-box;display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 7px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:1;cursor:pointer;white-space:nowrap}
-.oq-chip:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
-.oq-chip:focus-visible{outline:1px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+@keyframes oq-in{from{opacity:0}to{opacity:1}}
+.oq-chip{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:24px;max-width:min(160px,100%);padding:0 8px;border:0;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:18px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background-color .15s}
+.oq-chip:hover{background-color:var(--dsw-alias-interactive-bg-hover,#2631480f);color:var(--dsw-alias-label-primary)}
+.oq-chip:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
 .oq-chip.oq-ok .oq-ring{color:var(--dsw-alias-brand-primary)}
 .oq-chip.oq-warn .oq-ring{color:var(--dsw-alias-state-warn-primary)}
 .oq-chip.oq-error .oq-ring{color:var(--dsw-alias-state-error-primary)}
 .oq-chip.oq-compact{width:24px;height:24px;padding:0;justify-content:center;gap:0}
-.oq-chip-text{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary)}
+.oq-chip-text{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-primary);font-weight:500;font-variant-numeric:tabular-nums}
+.oq-chip-reset{flex:none;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:15px;font-variant-numeric:tabular-nums}
 .oq-ring{flex:none;display:block}
-.oq-panel{position:fixed;z-index:320;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:0 8px 28px color-mix(in srgb,var(--dsw-alias-label-primary) 14%,transparent);font-size:12px}
-.oq-head{display:flex;align-items:center;gap:4px;padding:8px 8px 6px 12px;border-bottom:1px solid var(--dsw-alias-border-l1)}
-.oq-title{flex:1 1 auto;min-width:0;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.oq-tool{width:22px;height:22px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:1;cursor:pointer}
-.oq-tool:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
-.oq-tool:disabled{opacity:.45;cursor:default}
-.oq-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px 12px}
-.oq-row{padding:5px 0}
-.oq-row+.oq-row{border-top:1px solid var(--dsw-alias-border-l1)}
-.oq-row-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-.oq-k{color:var(--dsw-alias-label-secondary);white-space:nowrap}
-.oq-v{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
-.oq-v.oq-ok{color:var(--dsw-alias-label-primary)}
+.oq-panel{position:fixed;z-index:1100;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;isolation:isolate;color:var(--dsw-alias-label-primary);background:var(--dsw-menu-surface-fill,rgba(252,253,254,.7));-webkit-backdrop-filter:var(--dsw-menu-backdrop-filter,blur(40px) saturate(150%));backdrop-filter:var(--dsw-menu-backdrop-filter,blur(40px) saturate(150%));border-radius:var(--dsw-radius-lg,16px);box-shadow:0 0 0 .5px var(--dsw-alias-border-l1,rgba(0,0,0,.04)),0 3px 8px rgba(0,0,0,.04),0 0 20px rgba(0,0,0,.05);font-size:13px;line-height:20px;padding:4px;animation:oq-in 40ms ease-out}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.oq-panel{background:var(--dsw-alias-bg-layer-2,#fff)}}
+@media (prefers-reduced-motion:reduce){.oq-panel{animation:none}}
+.oq-head{display:flex;align-items:center;gap:6px;flex:0 0 auto;height:34px;padding:0 4px 0 8px;border-bottom:.5px solid var(--dsw-alias-border-l2,rgba(0,0,0,.1))}
+.oq-title{flex:1 1 auto;min-width:0;font-size:13px;line-height:20px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oq-tool{width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;margin:0;border:0;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:15px;line-height:1;cursor:pointer}
+.oq-tool:hover{background-color:var(--dsw-alias-interactive-bg-hover,#2631480f);color:var(--dsw-alias-label-primary)}
+.oq-tool:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}
+.oq-tool:disabled{opacity:.4;cursor:default}
+.oq-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:0 0 4px}
+.oq-row{display:flex;flex-direction:column;gap:6px;box-sizing:border-box;min-height:34px;padding:6px 8px}
+.oq-sep{height:.5px;margin:3px 8px;background:var(--dsw-alias-border-l2,rgba(0,0,0,.1))}
+.oq-row-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.oq-k{color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px;white-space:nowrap}
+.oq-v{color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
 .oq-v.oq-warn{color:var(--dsw-alias-state-warn-primary)}
 .oq-v.oq-error{color:var(--dsw-alias-state-error-primary)}
-.oq-bar{position:relative;height:4px;margin-top:6px;border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 18%,transparent)}
-.oq-bar-fill{display:block;height:100%;border-radius:2px;background:var(--dsw-alias-brand-primary)}
+.oq-bar{position:relative;height:2px;border-radius:1px;overflow:hidden;background:var(--dsw-alias-bg-skeleton,rgba(0,0,0,.04))}
+.oq-bar-fill{display:block;height:100%;border-radius:1px;background:var(--dsw-alias-brand-primary);transition:width .3s cubic-bezier(.4,0,.2,1)}
 .oq-bar-fill.oq-warn{background:var(--dsw-alias-state-warn-primary)}
 .oq-bar-fill.oq-error{background:var(--dsw-alias-state-error-primary)}
-.oq-sub{margin-top:5px;color:var(--dsw-alias-label-secondary);font-size:11px;font-variant-numeric:tabular-nums}
-.oq-note{padding:6px 0;color:var(--dsw-alias-label-secondary)}
-.oq-error-title{color:var(--dsw-alias-state-error-primary);font-weight:600}
-.oq-error-hint{margin-top:4px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.5}
-.oq-retry{margin-top:8px;display:inline-flex;align-items:center;height:24px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;font-size:11px;cursor:pointer}
-.oq-retry:hover{border-color:var(--dsw-alias-label-secondary)}
-.oq-foot{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:6px 12px 8px;border-top:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary);font-size:10px}
+.oq-sub{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:15px;font-variant-numeric:tabular-nums}
+.oq-note{padding:8px 8px 10px;color:var(--dsw-alias-label-secondary)}
+.oq-error-title{color:var(--dsw-alias-state-error-primary);font-size:13px;line-height:20px;font-weight:500}
+.oq-error-hint{margin-top:2px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:15px}
+.oq-retry{margin-top:10px;display:inline-flex;align-items:center;height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l3,rgba(0,0,0,.12));border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;line-height:18px;cursor:pointer}
+.oq-retry:hover{background-color:var(--dsw-alias-interactive-bg-hover,#2631480f)}
+.oq-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 4px;border-top:.5px solid var(--dsw-alias-border-l2,rgba(0,0,0,.1));color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:15px}
 `
 
     /** Client plugin entry. */
@@ -616,7 +669,7 @@ window.__ModuleLoader__.load({
     return {
       apply,
       inject,
-      _internals: { translate, dictOf, severityOf, summarize, rowModels, buildRowElements, buildBody, buildPanel, formatReset, formatTime },
+      _internals: { translate, dictOf, severityOf, summarize, rowModels, buildRowElements, buildBody, buildPanel, formatReset, formatResetClock, formatTime },
     }
   },
 })

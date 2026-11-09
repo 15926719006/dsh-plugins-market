@@ -142,8 +142,8 @@
         "zh": "OpenCode Go 额度"
       },
       "description": {
-        "en": "Remaining OpenCode Go subscription quota in the sidebar foot, with rolling, weekly and monthly windows.",
-        "zh": "在页面左下角的侧栏底部显示 OpenCode Go 订阅的剩余额度，点开查看滚动、每周、每月三个窗口的用量与重置时间。"
+        "en": "OpenCode Go quota in the sidebar foot: the badge previews the rolling (5h) window's remaining percentage and reset time; open it for the 5h, weekly and monthly windows with usage and reset times.",
+        "zh": "在页面左下角显示 OpenCode Go 订阅额度：徽章预览滚动（5 小时）窗口的剩余百分比和刷新时间，点开查看 5 小时、每周、每月三个窗口的用量与重置时间。"
       },
       "category": "tools",
       "labels": [
