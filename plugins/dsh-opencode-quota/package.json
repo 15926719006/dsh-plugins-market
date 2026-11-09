@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-opencode-quota",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "OpenCode Go subscription quota at the page's bottom-left: a sidebar-foot chip with the remaining percentage and a popover for the rolling, weekly and monthly windows.",
