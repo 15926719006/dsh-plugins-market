@@ -1,6 +1,6 @@
 {
   "name": "@local/session-rename",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Summarize a Session from its sidebar row and rename it in one click.",

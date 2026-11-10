@@ -6,7 +6,7 @@
 
 ![会话行悬停时的总结重命名按钮](docs/preview.png)
 
-*图：鼠标移到会话行上，右侧按钮区出现「更多 / 归档 / 置顶 / 总结重命名」；悬停 sparkle 图标提示「总结并重命名」。按钮排在置顶按钮右边，不需要安装置顶或归档插件也能用。*
+*图：鼠标移到会话行上，右侧按钮区出现「更多 / 归档 / 置顶 / 总结重命名」，最右边的 sparkle 图标就是本插件；它排在置顶按钮右边，不需要安装置顶或归档插件也能用。*
 
 ![点击后的新标题与成功提示](docs/preview-result.png)
 
@@ -14,7 +14,7 @@
 
 ![插件页上的 devops 编号前缀开关](docs/preview-config.png)
 
-*图：插件页（插件 → 已安装插件 → 总结重命名）详情文档下方的「功能开关」区：开关、格式说明、凭据检测结果、当前标题预算与保存按钮。*
+*图：插件页（插件 → 已安装插件 → 总结重命名）详情文档下方的「功能开关」区：开关、格式说明、当前标题预算与保存按钮。*
 
 ![带 devops 前缀的会话标题](docs/preview-devops.png)
 
@@ -91,7 +91,7 @@ dsh plugin --profile desktop add /path/to/dsh-session-rename
 | 配置 | 位置 | 默认 |
 | --- | --- | --- |
 | 标题带 devops 编号前缀 | 插件页 → 总结重命名 → 功能开关 | 关 |
-| 标题字节上限 | profile 的 `cordis.patch.yml`：`session-title.maxTitleBytes: 240` | 本仓库安装时已写入；其他部署可自行调整，未放宽时插件会自动压缩标题 |
+| 标题字节上限 | profile 的 `cordis.patch.yml`：`session-title.maxTitleBytes: 240` | 装到本机 profile 时已写入这个上限；其他部署可自行调整，未放宽时插件会自动压缩标题 |
 
 模型跟随会话当前路由。devops 凭据见上方「凭据」一行。
 
