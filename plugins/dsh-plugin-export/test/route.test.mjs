@@ -6,13 +6,13 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { apply, locatePluginPackage, PLUGIN_EXPORT_PATH } from '../index.js'
 import { archiveFileName } from '../tar.js'
 
-const profileDir = process.env.DSH_PROFILE_DIR ?? '/Users/maka.li/.dsh/profiles/desktop'
+const profileDir = process.env.DSH_PROFILE_DIR ?? join(homedir(), '.dsh', 'profiles', 'desktop')
 const baseUrl = pathToFileURL(`${profileDir}/`).href
 
 /** Minimal Host context: Loader bases, a captured connection route, and a logger. */
