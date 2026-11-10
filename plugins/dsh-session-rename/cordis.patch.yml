@@ -1,0 +1,6 @@
+# Inserts the Host half of the session-rename bundle: the
+# `POST /api/session-rename` route that summarizes a Session and renames it.
+# The browser half ships through `dsh.client` in package.json.
+- insert:
+    - id: session-rename
+      name: '@local/session-rename'

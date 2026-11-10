@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Summarize & Rename",
+    "description": "Click a Session row to summarize the whole conversation into a one-line title and rename it in place; an optional switch on the plugin page prefixes titles with the devops number and platform title."
+  }
+}

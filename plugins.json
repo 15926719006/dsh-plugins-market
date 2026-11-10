@@ -207,6 +207,31 @@
       "sortKeys": {
         "recommended": 85
       }
+    },
+    "dsh-session-rename": {
+      "title": {
+        "en": "Summarize & Rename",
+        "zh": "总结重命名"
+      },
+      "description": {
+        "en": "One click on a Session row summarizes the whole conversation into a one-line title and renames it in place; an optional switch on the plugin page prefixes the title with the devops requirement number and platform title.",
+        "zh": "在会话行悬停时点一下，用这个会话自己的模型把整段对话概括成一行标题并直接重命名；插件页可开启「devops 编号前缀」，让标题带上需求编号与平台标题。"
+      },
+      "category": "ui",
+      "labels": [
+        "productivity"
+      ],
+      "keywords": [
+        "session",
+        "rename",
+        "title",
+        "summarize",
+        "sidebar",
+        "devops"
+      ],
+      "sortKeys": {
+        "recommended": 88
+      }
     }
   }
 }
