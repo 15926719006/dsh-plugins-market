@@ -183,6 +183,30 @@
       "sortKeys": {
         "recommended": 60
       }
+    },
+    "dsh-turn-duration": {
+      "title": {
+        "en": "Turn Duration",
+        "zh": "单轮耗时"
+      },
+      "description": {
+        "en": "How long each assistant turn took, shown under its final reply: model time, tool calls and waiting included, with the start and end clock times on hover.",
+        "zh": "在每条助手回复底部显示这一轮从开始到结束用了多久：包含模型思考、工具调用和等待，悬停可看起止时间；历史会话同样按日志补算。"
+      },
+      "category": "ui",
+      "labels": [
+        "productivity"
+      ],
+      "keywords": [
+        "duration",
+        "elapsed",
+        "timing",
+        "turn",
+        "session"
+      ],
+      "sortKeys": {
+        "recommended": 85
+      }
     }
   }
 }

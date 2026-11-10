@@ -1,0 +1,6 @@
+# Inserts the Host half of the turn-duration bundle: the `turnDuration`
+# Session projection that folds `turn/start` and `turn/end` into a duration.
+# The browser half ships through `dsh.client` in package.json.
+- insert:
+    - id: turn-duration
+      name: '@local/turn-duration'

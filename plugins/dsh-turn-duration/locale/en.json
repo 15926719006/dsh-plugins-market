@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Turn duration",
+    "description": "Shows how long each assistant turn took under its reply, with start and end times on hover."
+  }
+}

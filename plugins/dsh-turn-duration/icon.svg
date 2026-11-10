@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Turn duration">
+  <rect width="64" height="64" rx="14" fill="#EAF2FC"/>
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#247BBF" stroke-width="3.5"/>
+  <path d="M32 21v11l8 5" fill="none" stroke="#247BBF" stroke-width="3.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 13.5v3M50.5 32h-3M32 50.5v-3M13.5 32h3" fill="none" stroke="#247BBF"
+        stroke-width="3" stroke-linecap="round"/>
+</svg>
