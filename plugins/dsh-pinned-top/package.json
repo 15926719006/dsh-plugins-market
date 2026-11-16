@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-pinned-top",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Pinned Sessions section at the very top of the sidebar, plus one-click archive for every Session under a workspace row.",

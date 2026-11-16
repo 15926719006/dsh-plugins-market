@@ -61,6 +61,10 @@ node build/fork.mjs
 
 脚本直接读取 `app.asar`，上游锚点（anchor）移动时会明确报错，而不是发布一个只打了一半补丁的侧边栏。如果报某个锚点缺失，请对比新版 `lib/client.js` 中对应的位置并更新 `build/fork.mjs`。
 
+从 DSH **0.2.2-rc.3** 起官方 Client bundle 以压缩形式发布（无空格、单参数箭头不带括号），`build/fork.mjs` 的锚点按这种形态书写；对非压缩的上游会在第一个锚点处报 `upstream bundle shape changed`。
+
+fork 必须原样保留上游声明的**全部 slot 洞口**。官方 `ui-workspace` 在 0.2.2-rc.3 新增了第三个目录流洞口 `workspace.picker.directoryFlow`；0.2.0 的 fork 缺这个洞口，导致目录选择器的浏览器半侧（它一次性嵌套注册三个洞口）整体注册不上，侧边栏的「添加工作区」按钮因此消失——这正是 0.2.1 修复的问题。
+
 ## 在应用运行时更新
 
 本插件不是边缘装饰：它替换官方的 workspace 浏览器，并且是 `uiWorkspace` 客户端服务的提供方；会话输入框/编辑器（`ui-conversation`）、聊天行（`ui-chat`）、侧边栏、定时任务、agent-preset 和目录选择器插件都在 `inject` 中声明了它。因此替换它的代码会拆掉这些使用方再重新创建。这正是「改一下侧栏，对话框/输入框就没了」背后的机制。

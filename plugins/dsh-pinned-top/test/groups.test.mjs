@@ -20,20 +20,24 @@ const eq = (actual, expected) => assert.deepStrictEqual(exprValue(actual), expec
 // verified before the live profile's `lib/client.js` is rewritten.
 const clientPath = process.env.PINNED_TOP_CLIENT ?? new URL('../lib/client.js', import.meta.url)
 const source = readFileSync(clientPath, 'utf8')
-const instrumented = source.replace(
-  '\t\treturn module.exports;',
+// The artifact may be pretty-printed (older releases) or minified (0.2.2-rc.3+),
+// so the instrumentation anchor is located by token, not by whitespace.
+const exportAnchor = 'return module.exports'
+const exportAt = source.lastIndexOf(exportAnchor)
+if (exportAt === -1) throw new Error('instrumentation anchor missing: cannot expose deriveGroups')
+const instrumented =
+  source.slice(0, exportAt) +
   [
-    '\t\tmodule.exports.__test = {',
-    '\t\t\tderiveGroups,',
-    '\t\t\tPINNED_GROUP_KEY,',
-    '\t\t\tarchiveAllTargets,',
-    '\t\t\t...(typeof archiveableCountsByWorkspace === "function" ? { archiveableCountsByWorkspace } : {}),',
-    '\t\t\tProjectRowItem',
-    '\t\t};',
-    '\t\treturn module.exports;',
-  ].join('\n'),
-)
-if (instrumented === source) throw new Error('instrumentation anchor missing: cannot expose deriveGroups')
+    'module.exports.__test = {',
+    'deriveGroups,',
+    'PINNED_GROUP_KEY,',
+    'archiveAllTargets,',
+    '...(typeof archiveableCountsByWorkspace === "function" ? { archiveableCountsByWorkspace } : {}),',
+    'ProjectRow',
+    '};',
+    '',
+  ].join('\n') +
+  source.slice(exportAt)
 
 let registration = null
 const fakeElement = () => ({ dataset: {}, setAttribute() {}, textContent: '' })
@@ -86,7 +90,7 @@ const moduleExports = registration.factory((specifier) => {
   if (!(specifier in modules)) throw new Error(`unexpected require: ${specifier}`)
   return modules[specifier]
 })
-const { deriveGroups, PINNED_GROUP_KEY, archiveAllTargets, archiveableCountsByWorkspace, ProjectRowItem } = moduleExports.__test
+const { deriveGroups, PINNED_GROUP_KEY, archiveAllTargets, archiveableCountsByWorkspace, ProjectRow } = moduleExports.__test
 
 const session = (id, extra = {}) => ({
   id,
@@ -255,7 +259,10 @@ const collectButtons = (node, found = []) => {
 }
 const renderRow = (overrides = {}) => {
   const calls = []
-  const tree = ProjectRowItem({
+  // 0.2.2-rc.3 split the row dispatcher (ProjectRowItem) from the row component
+  // (ProjectRow) and moved the create action onto `actions`, so the test drives
+  // the component that actually renders the buttons.
+  const tree = ProjectRow({
     group: {
       key: 'w1',
       workspaceId: 'w1',
@@ -266,18 +273,21 @@ const renderRow = (overrides = {}) => {
       containsCurrent: false,
       sessionCount: 3,
     },
+    containsCurrentDescendant: false,
     onToggle: () => {},
-    onCreate: () => calls.push('create'),
-    actions: { rename: () => {}, delete: () => {} },
+    drag: undefined,
+    home: '/Users/example',
+    newShortcut: undefined,
+    t: (key) => key,
+    actions: { reorder: false, create: () => calls.push('create') },
     archiveableCount: 3,
     onArchiveAll: () => {
       calls.push('archiveAll')
       return Promise.resolve()
     },
-    drag: undefined,
-    home: '/Users/example',
-    newShortcut: undefined,
-    t: (key) => key,
+    renderFactorySlot: () => null,
+    useContextMenuTarget: () => false,
+    useContextMenu: () => ({ getTriggerProps: () => ({}) }),
     ...overrides,
   })
   return { tree, calls }
@@ -315,7 +325,7 @@ const labelsOf = (tree) => collectButtons(tree).map((node) => node.props['aria-l
 {
   const { tree } = renderRow({
     group: { key: '__pinned__', workspaceId: undefined, label: '置顶', cwd: undefined, createdAt: undefined, expanded: true, containsCurrent: false, sessionCount: 1 },
-    actions: undefined,
+    actions: { reorder: false },
   })
   assert.ok(!labelsOf(tree).includes('actions.archiveAll.aria'), 'the pinned section has no archive-all button')
 }
