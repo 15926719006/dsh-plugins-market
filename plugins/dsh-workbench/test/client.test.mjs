@@ -92,6 +92,10 @@ function createCtx({ notes = {}, workRoot = '/Users/me/Desktop/work' } = {}) {
     effect(callback) {
       return callback()
     },
+    setTimeout(callback) {
+      callback()
+      return () => {}
+    },
     get(name) {
       if (name === 'sessions') return { list: { getSnapshot: () => ({ byId }) } }
       if (name === 'workspaces') return { list: { getSnapshot: () => ({ archivedSessionIds: [] }) } }

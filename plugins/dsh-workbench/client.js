@@ -588,6 +588,22 @@ window.__ModuleLoader__.load({
 
         seat('main', 'main', { name: 'main', key: PANEL_ID }, safe('page', WorkbenchPage))
 
+        /** 探针：槽位里到底登记了哪些入口 —— 判断「注册成功」与「真的在列表里」的差别。 */
+        const dumpEntries = (when) => {
+          try {
+            const panellist = ctx.slots.entries('sidebar.panellist') ?? []
+            const main = ctx.slots.entries('main') ?? []
+            report(`entries:${when}`, JSON.stringify({
+              panellist: panellist.map((entry) => entry.id ?? entry.key ?? '?'),
+              main: main.map((entry) => entry.key ?? entry.id ?? '?'),
+            }))
+          } catch (error) {
+            report(`entries:${when}`, error)
+          }
+        }
+        ctx.setTimeout(() => dumpEntries('late'), 1200)
+        dumpEntries('now')
+
         // 生产环境忽略返回值；测试从这里拿纯逻辑（快照 → 行、行 → 周报）。
         return { buildRows, weeklyDraft, weekRange, refOf, projectOf }
       },
