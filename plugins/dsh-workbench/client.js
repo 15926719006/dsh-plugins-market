@@ -240,15 +240,23 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'sessions', 'workspaces', 'uiWorkspace'],
+      inject: ['slots'],
       apply(ctx) {
-        const sessions = ctx.get('sessions')
-        const workspaces = ctx.get('workspaces')
-        const uiWorkspace = ctx.get('uiWorkspace')
+        // 服务在渲染时按需取：Web 页启动时这些服务可能还没就绪，
+        // 放进模块级 inject 会让整个模块一直等待、静默不执行。
+        const service = (name) => {
+          try {
+            return ctx.get(name)
+          } catch {
+            return undefined
+          }
+        }
         let config = { workRoot: '' }
 
         /** 会话快照 + 旁注 → 行。 */
         const buildRows = (notes, rootOverride) => {
+          const sessions = service('sessions')
+          const workspaces = service('workspaces')
           if (sessions?.list?.getSnapshot === undefined) return []
           const list = sessions.list.getSnapshot()
           const byId = list.byId ?? {}
@@ -432,7 +440,7 @@ window.__ModuleLoader__.load({
           }, [applyNotes])
 
           const onOpen = useCallback((sessionId) => {
-            uiWorkspace?.openSession(sessionId)
+            service('uiWorkspace')?.openSession(sessionId)
           }, [])
 
           const { start, end } = weekRange()
