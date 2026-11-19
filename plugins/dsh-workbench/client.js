@@ -287,7 +287,7 @@ window.__ModuleLoader__.load({
       tasks.sort((a, b) => b.updatedAt - a.updatedAt)
 
       const unlinked = sessions
-        .filter((session) => session.refs.length === 0)
+        .filter((session) => session.refs.length === 0 && session.delegated !== true)
         .map((session) => {
           const key = `session:${session.id}`
           const note = notes[key] ?? {}
@@ -353,7 +353,7 @@ window.__ModuleLoader__.load({
             if (summary === undefined || summary === null) continue
             const cwd = typeof summary.cwd === 'string' ? summary.cwd : ''
             if (cwd !== root && !cwd.startsWith(`${root}/`)) continue
-            if (summary.origin === 'subagent' || summary.blank === true) continue
+            if (summary.blank === true) continue
             const title = summary.displayTitle ?? id
             rows.push({
               id,
@@ -362,6 +362,8 @@ window.__ModuleLoader__.load({
               project: projectOf(cwd),
               updatedAt: typeof summary.updatedAt === 'number' ? summary.updatedAt : 0,
               running: summary.running === true,
+              // 子智能体会话算同一件事的并行分支：计入任务，但不单独占「未挂单」的位置。
+              delegated: summary.origin === 'subagent',
               refs: [],
               titleRef: refOf(title),
             })
@@ -499,6 +501,7 @@ window.__ModuleLoader__.load({
                     title: session.title,
                   },
                   h('span', { style: styles.memberTitle }, session.title),
+                  session.delegated === true ? h('span', { style: styles.memberMeta }, '子会话') : null,
                   h('span', { style: styles.memberMeta }, `${session.project} · ${md(session.updatedAt)}`),
                   ))
                   : null,
