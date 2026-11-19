@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-remote-pair",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "用手机扫码配对，把局域网或公网上的浏览器直接接到这台 DSH 上。",

@@ -1,10 +1,10 @@
 ## 效果图
 
-![设置里的手机访问页](docs/preview.png)
+![设置里的手机访问页](https://raw.githubusercontent.com/15926719006/dsh-plugins-market/main/plugins/dsh-remote-pair/docs/preview.png)
 
 *图：设置 → 手机访问。左边是二维码，右边是长期访问链接，可一键复制或换新链接。*
 
-![手机上装好之后](docs/preview-mobile.jpg)
+![手机上装好之后](https://raw.githubusercontent.com/15926719006/dsh-plugins-market/main/plugins/dsh-remote-pair/docs/preview-mobile.jpg)
 
 *图：手机「添加到主屏幕」后点开的样子——直接进入已登录的 DSH，不再出现在浏览器地址栏里。*
 
