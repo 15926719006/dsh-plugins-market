@@ -120,9 +120,8 @@ test('注册「左侧入口」与「整页」两个座位', async () => {
   const mod = await loadModule()
   const { ctx, registered } = createCtx()
   mod.apply(ctx)
-  // 左侧入口用 id，整页用 main 的 key，两者必须是同一个面板 id；
-  // 另有底部备用入口 workbench-entry
-  assert.deepEqual([...registered.keys()].sort(), ['key:workbench', 'workbench', 'workbench-entry'])
+  // 左侧入口用 id，整页用 main 的 key，两者必须是同一个面板 id
+  assert.deepEqual([...registered.keys()].sort(), ['key:workbench', 'workbench'])
   assert.equal(mod.inject.includes('slots'), true)
 })
 

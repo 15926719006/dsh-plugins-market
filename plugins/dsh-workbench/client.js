@@ -551,34 +551,6 @@ window.__ModuleLoader__.load({
           }
         }
 
-        /** 底部备用入口：一点就切到工作台页。 */
-        function FooterEntry() {
-          const [hover, setHover] = useState(false)
-          return h('button', {
-            title: '打开工作台',
-            onClick: () => {
-              try {
-                service('layout').selectPanel(PANEL_ID)
-              } catch (error) {
-                report('selectPanel', error)
-              }
-            },
-            onMouseEnter: () => setHover(true),
-            onMouseLeave: () => setHover(false),
-            style: {
-              appearance: 'none',
-              border: `1px solid ${hover ? C.border2 : 'transparent'}`,
-              background: hover ? C.layer1 : 'transparent',
-              color: C.label2,
-              borderRadius: 8,
-              padding: '4px 8px',
-              font: 'inherit',
-              fontSize: 12,
-              cursor: 'pointer',
-            },
-          }, '▤ 工作台')
-        }
-
         const guard = (label, build) => {
           try {
             return ctx.effect(() => {
@@ -595,21 +567,6 @@ window.__ModuleLoader__.load({
           }
         }
 
-        /** 文案：locale 服务不在也能退化成字面量，不阻塞注册。 */
-        const t = (key) => {
-          const locale = service('locale')
-          if (locale === undefined) return key
-          try {
-            return locale.bind('workbench')(key)
-          } catch {
-            return key
-          }
-        }
-
-        /**
-         * 一个座位：先把 inject 回调是否真的触发写进日志，再把 register 的结果写进去。
-         * 这样日志能分清「注入口没被声明」和「注册被拒」。
-         */
         const seat = (slotName, label, spec, Component) => guard(label, () => ctx.slots.inject(slotName, () => {
           report(`${label}:inject`, 'fired')
           try {
@@ -622,38 +579,14 @@ window.__ModuleLoader__.load({
           }
         }))
 
-        guard('locale', () => {
-          const locale = service('locale')
-          if (locale === undefined) {
-            report('locale', 'missing')
-            return () => {}
-          }
-          const offZh = locale.register('workbench', 'zh', { panel: '工作台', fallback: '工作台（底部入口）' })
-          const offEn = locale.register('workbench', 'en', { panel: 'Workbench', fallback: 'Workbench (footer entry)' })
-          return () => {
-            offZh()
-            offEn()
-          }
-        })
-
         seat('sidebar.panellist', 'panellist', {
           name: 'sidebar.panellist',
           id: PANEL_ID,
-          order: 25,
-          label: () => t('panel'),
-          locale: 'workbench',
+          order: 6,
+          label: '工作台',
         }, safe('panellist-icon', PanelIcon))
 
-        seat('main', 'main', { name: 'main', key: PANEL_ID, locale: 'workbench' }, safe('page', WorkbenchPage))
-
-        // 差分诊断用的备用入口：在设置按钮旁边。面板列表若仍不出现，这里能进同一页。
-        seat('sidebar.footer.action', 'footer', {
-          name: 'sidebar.footer.action',
-          id: `${PANEL_ID}-entry`,
-          order: 20,
-          label: () => t('fallback'),
-          locale: 'workbench',
-        }, safe('footer-icon', FooterEntry))
+        seat('main', 'main', { name: 'main', key: PANEL_ID }, safe('page', WorkbenchPage))
 
         // 生产环境忽略返回值；测试从这里拿纯逻辑（快照 → 行、行 → 周报）。
         return { buildRows, weeklyDraft, weekRange, refOf, projectOf }
