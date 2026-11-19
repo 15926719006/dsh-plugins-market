@@ -216,3 +216,15 @@ test('a record without a Session still shows its card and clicks harmlessly', ()
   harness.cards[0].onclick()
   assert.deepEqual(harness.opened, [])
 })
+
+test('a waiting card names the Session that is asking', () => {
+  const { compose } = plugin._internals
+  assert.deepEqual(
+    compose({ kind: 'question', title: '报价单项目', body: '要加一列吗?' }),
+    { title: '需要你回答 · 报价单项目', body: '要加一列吗?' },
+  )
+  assert.deepEqual(
+    compose({ kind: 'question', title: '', body: '' }),
+    { title: '需要你回答', body: '有一个操作在等你处理。' },
+  )
+})

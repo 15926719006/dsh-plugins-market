@@ -270,6 +270,22 @@ export function apply(ctx) {
     return false
   }
 
+  /**
+   * Permission that describes the pages actually watching now.
+   *
+   * The last value ever reported outlives the page that sent it, so a closed
+   * tab would otherwise make the debug route claim `denied` forever.
+   * @returns the newest live page's permission, or the last reported one.
+   */
+  const currentPermission = () => {
+    let newest
+    for (const page of pages.values()) {
+      if (page.opened === 0) continue
+      if (newest === undefined || page.at >= newest.at) newest = page
+    }
+    return newest === undefined ? permission : newest.permission
+  }
+
   const roots = () => {
     const agents = ctx.get('agents')
     if (agents === undefined || agents === null) return new Set()
@@ -620,7 +636,7 @@ export function apply(ctx) {
               stats,
               roots: [...roots()],
               clients: clients.size,
-              permission,
+              permission: currentPermission(),
               pages: [...pages].map(([key, page]) => ({ page: key, ...page })),
               sessions: [...scratch.keys()],
             }),
@@ -652,7 +668,7 @@ export function apply(ctx) {
             force,
           })
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-          res.end(JSON.stringify({ ok: true, clients: clients.size, permission, record }))
+          res.end(JSON.stringify({ ok: true, clients: clients.size, permission: currentPermission(), record }))
         },
       }),
     'task-notify: test route',

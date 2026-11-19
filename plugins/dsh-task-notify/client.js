@@ -132,10 +132,9 @@ window.__ModuleLoader__.load({
       const waiting = kind === 'question' || kind === 'approval'
       const body = typeof record.body === 'string' ? record.body.trim() : ''
       const sessionTitle = typeof record.title === 'string' ? record.title.trim() : ''
-      if (waiting) {
-        return { title: label, body: body.length > 0 ? body : words.waiting }
-      }
-      return { title: sessionTitle.length > 0 ? `${label} · ${sessionTitle}` : label, body }
+      const title = sessionTitle.length > 0 ? `${label} · ${sessionTitle}` : label
+      if (waiting) return { title, body: body.length > 0 ? body : words.waiting }
+      return { title, body }
     }
 
     /**

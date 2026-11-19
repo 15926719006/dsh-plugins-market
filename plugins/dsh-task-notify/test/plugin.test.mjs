@@ -129,12 +129,19 @@ function hello(routes, body) {
  * @param options - page identity and the permission it reports.
  * @returns the chunks the plugin writes, in order.
  */
-function openStream(routes, options = {}) {
+function openStreamHandle(routes, options = {}) {
   const chunks = []
   const handler = routes.get('/plugins/task-notify/events')
   const page = options.page ?? 'test-page'
+  const closes = []
   handler(
-    { on() {}, method: 'GET', url: `/plugins/task-notify/events?page=${page}` },
+    {
+      on(name, listener) {
+        if (name === 'close') closes.push(listener)
+      },
+      method: 'GET',
+      url: `/plugins/task-notify/events?page=${page}`,
+    },
     {
       writeHead() {},
       write(chunk) {
@@ -142,11 +149,53 @@ function openStream(routes, options = {}) {
         return true
       },
       end() {},
-      on() {},
+      on(name, listener) {
+        if (name === 'close') closes.push(listener)
+      },
     },
   )
   if (options.permission !== undefined) hello(routes, { page, permission: options.permission, lang: 'zh' })
-  return chunks
+  return {
+    chunks,
+    close() {
+      for (const listener of closes) listener()
+    },
+  }
+}
+
+/**
+ * Read the debug route as JSON.
+ * @param routes - captured routes.
+ * @returns the decoded payload.
+ */
+async function debugOf(routes) {
+  const handler = routes.get('/plugins/task-notify/debug')
+  const body = await new Promise((resolve) => {
+    handler(
+      { on() {}, method: 'GET', url: '/plugins/task-notify/debug' },
+      {
+        writeHead() {},
+        write() {
+          return true
+        },
+        end(chunk) {
+          resolve(String(chunk))
+        },
+        on() {},
+      },
+    )
+  })
+  return JSON.parse(body)
+}
+
+/**
+ * Open the plugin's event stream against a fake HTTP response.
+ * @param routes - captured routes.
+ * @param options - page identity and the permission it reports.
+ * @returns the chunks the plugin writes, in order.
+ */
+function openStream(routes, options = {}) {
+  return openStreamHandle(routes, options).chunks
 }
 
 /**
@@ -297,4 +346,18 @@ test('waiting for an answer carries the Session that is asking', () => {
     records.map((record) => record.title),
     ['报价单项目', '报价单项目'],
   )
+})
+
+test('the debug route reports the permission of the pages still watching', async () => {
+  const { ctx, routes } = fakeHost()
+  apply(ctx)
+  openStreamHandle(routes, { page: 'p1', permission: 'denied' })
+  const second = openStreamHandle(routes, { page: 'p2', permission: 'granted' })
+
+  assert.equal((await debugOf(routes)).permission, 'granted', 'the live granted page decides')
+  assert.equal((await debugOf(routes)).pages.length, 2)
+
+  second.close()
+  assert.equal((await debugOf(routes)).permission, 'denied', 'a closed page takes its permission with it')
+  assert.equal((await debugOf(routes)).pages.length, 1)
 })
