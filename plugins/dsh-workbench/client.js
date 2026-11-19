@@ -24,7 +24,7 @@ window.__ModuleLoader__.load({
     const REFS_ROUTE = '/api/workbench/refs'
 
     /** 兜底：Host 扫不到正文时，退回从会话标题里认编号。 */
-    const REF_PATTERN = /\b(RO-\d{8}-\d{3}(?:-S\d+)?|T-\d{8}-\d{3}|P-\d{8}-\d{3}|BUG-\d{8}-\d{3}|ON3-\d+)\b/
+    const REF_PATTERN = /\b(RO-\d{8}-\d{3}(?:-S\d+)?|T-\d{8}-\d{3}|P-\d{8}-\d{3}|BUG-\d{8}-\d{3}|ON3-\d{4,})\b/
 
     /** 排障：把异常打回 Host 写日志（页面控制台看不到时也能查）。 */
     function report(label, message) {
@@ -65,11 +65,11 @@ window.__ModuleLoader__.load({
       return parts[parts.length - 1] ?? cwd
     }
 
-    /** 从文本里认编号。 */
+    /** 从文本里认编号；子任务归到父需求。 */
     function refOf(text) {
       if (typeof text !== 'string') return null
       const hit = REF_PATTERN.exec(text)
-      return hit === null ? null : hit[1]
+      return hit === null ? null : hit[1].replace(/-S\d+$/u, '')
     }
 
     /** 主题 token，跟着 DSH 的亮/暗色走。 */

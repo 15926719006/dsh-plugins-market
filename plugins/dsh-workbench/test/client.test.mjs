@@ -213,7 +213,8 @@ test('单号识别与周窗口', async () => {
   const { ctx } = createCtx()
   const api = mod.apply(ctx)
   assert.equal(api.refOf('见 #demand/RO-20260923-028'), 'RO-20260923-028')
-  assert.equal(api.refOf('RO-20260923-028-S04 子任务'), 'RO-20260923-028-S04')
+  assert.equal(api.refOf('RO-20260923-028-S04 子任务'), 'RO-20260923-028')
+  assert.equal(api.refOf('ON3-123 太短不算'), null)
   assert.equal(api.refOf('顺手改了插件'), null)
 
   const { start, end } = api.weekRange(new Date(2026, 10, 18, 15, 0, 0))

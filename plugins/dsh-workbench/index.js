@@ -25,7 +25,7 @@ const REFS_PATH = join(DIR, 'refs.json')
  * devops 编号。和 `session-rename` 用的那一套一致：需求 RO、任务 T、专项 P、
  * 缺陷 BUG、issue ON3，子任务带 -S04 后缀。
  */
-const REF_PATTERN = /\b(RO-\d{8}-\d{3}(?:-S\d+)?|T-\d{8}-\d{3}|P-\d{8}-\d{3}|BUG-\d{8}-\d{3}|ON3-\d+)\b/g
+const REF_PATTERN = /\b(RO-\d{8}-\d{3}(?:-S\d+)?|T-\d{8}-\d{3}|P-\d{8}-\d{3}|BUG-\d{8}-\d{3}|ON3-\d{4,})\b/g
 const LOG_ROUTE = '/api/workbench/log'
 const LOG_PATH = join(DIR, 'client.log')
 
@@ -173,25 +173,46 @@ async function handleNotes(ctx, request) {
   }
 }
 
-/** 从一段文本里抠出全部 devops 编号（去重）。 */
+/** 从一段文本里抠出全部 devops 编号（去重，子任务归到父需求）。 */
 function findRefs(text) {
   const found = new Set()
-  for (const match of text.matchAll(REF_PATTERN)) found.add(match[1])
+  for (const match of text.matchAll(REF_PATTERN)) found.add(match[1].replace(/-S\d+$/u, ''))
   return [...found]
 }
 
+/** 事件属于哪一类说话人：只有人和助手的文本算数，工具输出不算。 */
+function speakerOf(type) {
+  if (type.startsWith('user') || type === 'prompt') return 'user'
+  if (type.startsWith('assistant')) return 'assistant'
+  return null
+}
+
 /**
- * 读一个会话的正文，找出它提到过的 devops 编号。
+ * 找出一个会话在谈的那**一个**单号。
  *
- * 用整段 JSON 做匹配：会话事件的 payload 形状随类型变化，逐个字段读会把
- * 以后新增的事件类型漏掉；对字符串做一次正则最稳。
+ * 规则（用真实日志定过）：先看用户说过的话，按时间取第一个出现的编号；
+ * 用户没提过，才退到助手文本里的第一个。
+ *
+ * 为什么不看工具输出：一次拉列表、一次 grep 文档就能带出几十个编号，
+ * 按"整份日志出现过的编号"归类，会把毫不相干的会话挂到同一个任务上。
+ * 为什么只取一个：一个会话干一件事，多出来的编号是顺手提到的。
  */
 async function scanSession(ctx, sessionId) {
   const query = ctx.get('sessionQuery')
   if (query === undefined || typeof query.readSession !== 'function') return null
   const snapshot = await query.readSession(sessionId)
   const events = Array.isArray(snapshot?.events) ? snapshot.events : []
-  return findRefs(JSON.stringify(events))
+
+  const bySpeaker = { user: [], assistant: [] }
+  for (const event of events) {
+    const speaker = speakerOf(String(event?.type ?? ''))
+    if (speaker === null) continue
+    const refs = findRefs(JSON.stringify(event?.data ?? {}))
+    if (refs.length > 0) bySpeaker[speaker].push(...refs)
+  }
+
+  const primary = bySpeaker.user[0] ?? bySpeaker.assistant[0] ?? null
+  return primary === null ? [] : [primary]
 }
 
 /**

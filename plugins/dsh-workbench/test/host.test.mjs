@@ -109,10 +109,11 @@ test('配置可以改并读回', async () => {
   assert.equal(read.config.workRoot, '/tmp/other')
 })
 
-test('从会话正文里认出 devops 编号，并按 updatedAt 缓存', async () => {
+test('只认用户在谈的那一个单号：工具输出里的编号不算', async () => {
   const events = [
     { type: 'user/message', data: { text: '看下 https://devops.ronhan.com/#demand/RO-20260923-028?mode=edit' } },
-    { type: 'tool/result', data: { output: '子任务 RO-20260923-028-S04 和任务 T-20261026-016' } },
+    { type: 'tool/result', data: { output: '子任务 RO-20260923-028-S04，另见 T-20261026-016 / P-20260908-001 / ON3-66441' } },
+    { type: 'assistant/message', data: { text: '顺手提一下 BUG-20260920-001' } },
   ]
   const routes = createCtx({ readSession: async () => ({ events }) })
   const refs = routes.get('/api/workbench/refs')
@@ -123,15 +124,37 @@ test('从会话正文里认出 devops 编号，并按 updatedAt 缓存', async (
   }))
 
   const first = await (await post({ sessions: [{ id: 'session-1', updatedAt: 100 }] })).json()
-  assert.deepEqual(first.refs['session-1'].sort(), ['RO-20260923-028', 'RO-20260923-028-S04', 'T-20261026-016'])
+  assert.deepEqual(first.refs['session-1'], ['RO-20260923-028'])
   assert.equal(first.scanned, 1)
 
   const second = await (await post({ sessions: [{ id: 'session-1', updatedAt: 100 }] })).json()
-  assert.equal(second.scanned, 0)
-  assert.deepEqual(second.refs['session-1'].sort(), ['RO-20260923-028', 'RO-20260923-028-S04', 'T-20261026-016'])
+  assert.equal(second.scanned, 0, '同一 updatedAt 走缓存')
+  assert.deepEqual(second.refs['session-1'], ['RO-20260923-028'])
+})
 
-  const third = await (await post({ sessions: [{ id: 'session-1', updatedAt: 200 }] })).json()
-  assert.equal(third.scanned, 1)
+test('用户粘了一整段列表时取第一个；用户没提才看助手；子任务归到父需求', async () => {
+  const pasted = [
+    { type: 'user/message', data: { text: '这几个一起看：RO-20261021-010 RO-20261008-004 ON3-59822' } },
+  ]
+  const assistantOnly = [
+    { type: 'user/message', data: { text: '帮我把这个需求收个尾' } },
+    { type: 'assistant/message', data: { text: '对应 BO 需求 RO-20260917-099-S04' } },
+  ]
+  const routes = createCtx({
+    readSession: async (id) => ({ events: id === 'session-paste' ? pasted : assistantOnly }),
+  })
+  const refs = routes.get('/api/workbench/refs')
+  const body = await (await call(refs, new Request('http://localhost/api/workbench/refs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessions: [
+      { id: 'session-paste', updatedAt: 1 },
+      { id: 'session-assistant', updatedAt: 1 },
+    ] }),
+  }))).json()
+
+  assert.deepEqual(body.refs['session-paste'], ['RO-20261021-010'])
+  assert.deepEqual(body.refs['session-assistant'], ['RO-20260917-099'])
 })
 
 test('没有 sessionQuery 时如实报告，不假装扫过', async () => {
