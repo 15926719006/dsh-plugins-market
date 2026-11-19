@@ -103,7 +103,7 @@ function createCtx({ notes = {}, workRoot = '/Users/me/Desktop/work' } = {}) {
         callback()
       },
       register(spec, Component) {
-        registered.set(spec.id, Component)
+        registered.set(spec.id ?? `key:${spec.key}`, Component)
         return () => {}
       },
     },
@@ -116,11 +116,12 @@ function createCtx({ notes = {}, workRoot = '/Users/me/Desktop/work' } = {}) {
   return { ctx, registered }
 }
 
-test('注册「输入框胶囊」与「浮层」两个座位', async () => {
+test('注册「左侧入口」与「整页」两个座位', async () => {
   const mod = await loadModule()
   const { ctx, registered } = createCtx()
   mod.apply(ctx)
-  assert.deepEqual([...registered.keys()].sort(), ['workbench-entry', 'workbench-panel'])
+  // 左侧入口用 id，整页用 main 的 key，两者必须是同一个面板 id
+  assert.deepEqual([...registered.keys()].sort(), ['key:workbench', 'workbench'])
   assert.equal(mod.inject.includes('slots'), true)
 })
 
