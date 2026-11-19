@@ -1,0 +1,37 @@
+{
+  "name": "@local/dsh-remote-pair",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "用手机扫码配对，把局域网或公网上的浏览器直接接到这台 DSH 上。",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "vendor/qrcode.cjs",
+    "cordis.patch.yml",
+    "docs/*.png",
+    "docs/*.jpg",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "docs/*.md",
+    "test/plugin.test.mjs"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

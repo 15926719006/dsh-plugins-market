@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Phone pairing",
+    "description": "Shows a long-lived access link and QR in Settings. Any browser that opens it signs in to this DSH, and the session lasts 10 years. Rotate the link to revoke."
+  }
+}

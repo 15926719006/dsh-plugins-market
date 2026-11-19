@@ -232,6 +232,21 @@
       "sortKeys": {
         "recommended": 88
       }
+    },
+    "dsh-remote-pair": {
+      "title": {
+        "zh": "手机配对",
+        "en": "Phone pairing"
+      },
+      "description": {
+        "zh": "设置页里给出一个长期访问链接和二维码：任何浏览器扫码或打开链接都能登进这台 DSH，登录态保留 10 年；想作废就换一个新链接。",
+        "en": "Shows a long-lived access link and QR in Settings. Any browser that opens it signs in to this DSH, and the session lasts 10 years. Rotate the link to revoke."
+      },
+      "category": "tools",
+      "keywords": [],
+      "sortKeys": {
+        "recommended": 10
+      }
     }
   }
 }

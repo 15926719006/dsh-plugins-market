@@ -1,0 +1,14 @@
+# 一条 Host 行：配对码、二维码 SVG、手机侧配对入口。
+# 浏览器半边由 package.json 的 dsh.client 段声明。
+- insert:
+    - id: remote-pair
+      name: '@local/dsh-remote-pair'
+      config:
+        # 手机扫码后要访问的公网入口（不带结尾斜杠）。
+        # 改成你自己的域名/端口，或清空后用 DSH_REMOTE_PUBLIC_URL 环境变量提供。
+        # 换成你自己的公网入口（不带结尾斜杠）；留空则不启用配对。
+        # 例：https://dsh.example.com:8443
+        publicBaseUrl: ''
+        # 配对码有效期与失败次数上限。
+        codeTtlSeconds: 60
+        maxAttempts: 5

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Phone pairing">
+  <rect x="14" y="6" width="26" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="3.2"/>
+  <rect x="22" y="12" width="10" height="3" rx="1.5" fill="currentColor" opacity=".45"/>
+  <g fill="currentColor">
+    <rect x="40" y="30" width="6" height="6" rx="1"/>
+    <rect x="50" y="30" width="6" height="6" rx="1"/>
+    <rect x="40" y="40" width="6" height="6" rx="1"/>
+    <rect x="50" y="40" width="4" height="4" rx="1"/>
+    <rect x="56" y="40" width="2" height="6" rx="1"/>
+    <rect x="45" y="48" width="6" height="6" rx="1"/>
+    <rect x="40" y="56" width="6" height="2" rx="1"/>
+  </g>
+  <circle cx="50" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="3"/>
+  <path d="M50 12v4l3 2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+</svg>
