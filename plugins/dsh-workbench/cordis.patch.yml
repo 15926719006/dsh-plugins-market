@@ -1,0 +1,5 @@
+# 工作台：会话旁注（结论 / 下一步 / 单号）+ 一屏视图 + 周报草稿。
+# 不替换任何官方 bundle，只在自己的一行里挂 Host 路由与两个 Client 座位。
+- insert:
+    - id: workbench
+      name: '@local/dsh-workbench'
