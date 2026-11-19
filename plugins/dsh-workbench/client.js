@@ -571,10 +571,15 @@ window.__ModuleLoader__.load({
               let scanned = 0
               let pending = 0
               try {
-                const result = await loadRefs(sessions)
-                refsMap = result.refs ?? {}
-                scanned = result.scanned ?? 0
-                pending = result.pending ?? 0
+                // Host 每轮只扫一批（单轮读上百份日志会让首屏很慢），这里把没扫完的补完。
+                for (let round = 0; round < 20; round += 1) {
+                  const result = await loadRefs(sessions)
+                  refsMap = { ...refsMap, ...(result.refs ?? {}) }
+                  scanned += result.scanned ?? 0
+                  pending = result.pending ?? 0
+                  if (pending === 0) break
+                  setScan({ sessions: sessions.length, tasks: 0, scanned, pending })
+                }
               } catch (reason) {
                 report('refs', reason)
               }
@@ -763,6 +768,22 @@ window.__ModuleLoader__.load({
 
         seat('main', 'main', { name: 'main', key: PANEL_ID, id: PANEL_ID }, WorkbenchPage)
 
+        // 临时自检：每个标签页首次加载时打开一次工作台，让我能从日志看到分组结果。
+        try {
+          if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('workbench:probe') === null) {
+            sessionStorage.setItem('workbench:probe', '1')
+            setTimeout(() => {
+              try {
+                service('layout').selectPanel(PANEL_ID)
+              } catch (error) {
+                report('probe:select', error)
+              }
+            }, 2500)
+          }
+        } catch (error) {
+          report('probe', error)
+        }
+
         // `apply` 的返回值会被 Cordis 当成 disposer：生产环境一律不返回。
         if (globalThis.__workbenchTest === true) {
           return { groupTasks, weeklyDraft, weekRange, refOf, projectOf }
@@ -772,3 +793,4 @@ window.__ModuleLoader__.load({
     }
   },
 })
+

@@ -221,7 +221,7 @@ async function handleRefs(ctx, request) {
       pending.push({ id, updatedAt })
     }
 
-    const limit = 120
+    const limit = 40
     const batch = pending.slice(0, limit)
     let scanned = 0
     let failed = 0
