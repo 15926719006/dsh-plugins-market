@@ -537,6 +537,20 @@ window.__ModuleLoader__.load({
           )
         }
 
+        /**
+         * 渲染兜底：槽位里的组件一旦抛错，那一格会被清空且不报错到页面。
+         * 包一层，把渲染期异常也写进同一份日志。
+         */
+        const safe = (label, Component) => function SafeSeat(props) {
+          try {
+            report(`${label}:render`, 'ok')
+            return Component(props)
+          } catch (error) {
+            report(`${label}:render`, error)
+            return null
+          }
+        }
+
         /** 底部备用入口：一点就切到工作台页。 */
         function FooterEntry() {
           const [hover, setHover] = useState(false)
@@ -628,9 +642,9 @@ window.__ModuleLoader__.load({
           order: 25,
           label: () => t('panel'),
           locale: 'workbench',
-        }, PanelIcon)
+        }, safe('panellist-icon', PanelIcon))
 
-        seat('main', 'main', { name: 'main', key: PANEL_ID, locale: 'workbench' }, WorkbenchPage)
+        seat('main', 'main', { name: 'main', key: PANEL_ID, locale: 'workbench' }, safe('page', WorkbenchPage))
 
         // 差分诊断用的备用入口：在设置按钮旁边。面板列表若仍不出现，这里能进同一页。
         seat('sidebar.footer.action', 'footer', {
@@ -639,7 +653,7 @@ window.__ModuleLoader__.load({
           order: 20,
           label: () => t('fallback'),
           locale: 'workbench',
-        }, FooterEntry)
+        }, safe('footer-icon', FooterEntry))
 
         // 生产环境忽略返回值；测试从这里拿纯逻辑（快照 → 行、行 → 周报）。
         return { buildRows, weeklyDraft, weekRange, refOf, projectOf }
