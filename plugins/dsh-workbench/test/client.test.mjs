@@ -39,6 +39,7 @@ async function loadModule() {
       },
     },
   }
+  globalThis.__workbenchTest = true
   await import('../client.js')
   cachedModule = mod
   return mod

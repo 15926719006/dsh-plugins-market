@@ -227,8 +227,14 @@ window.__ModuleLoader__.load({
       },
     }
 
+    let iconReported = false
+
     /** 左侧入口的图标：跟着文字的 currentColor 走。 */
     function PanelIcon(props) {
+      if (iconReported === false) {
+        iconReported = true
+        report('ready', 'sidebar entry rendered')
+      }
       const size = typeof props?.size === 'number' ? props.size : 18
       const active = props?.active === true
       return h('span', {
@@ -537,20 +543,6 @@ window.__ModuleLoader__.load({
           )
         }
 
-        /**
-         * 渲染兜底：槽位里的组件一旦抛错，那一格会被清空且不报错到页面。
-         * 包一层，把渲染期异常也写进同一份日志。
-         */
-        const safe = (label, Component) => function SafeSeat(props) {
-          try {
-            report(`${label}:render`, 'ok')
-            return Component(props)
-          } catch (error) {
-            report(`${label}:render`, error)
-            return null
-          }
-        }
-
         const guard = (label, build) => {
           try {
             return ctx.effect(() => {
@@ -568,11 +560,8 @@ window.__ModuleLoader__.load({
         }
 
         const seat = (slotName, label, spec, Component) => guard(label, () => ctx.slots.inject(slotName, () => {
-          report(`${label}:inject`, 'fired')
           try {
-            const dispose = ctx.slots.register(spec, Component)
-            report(`${label}:register`, 'ok')
-            return dispose
+            return ctx.slots.register(spec, Component)
           } catch (error) {
             report(`${label}:register`, error)
             return () => {}
@@ -588,41 +577,16 @@ window.__ModuleLoader__.load({
 
         seat('main', 'main', { name: 'main', key: PANEL_ID, id: PANEL_ID }, WorkbenchPage)
 
-        /** 探针：直接打印每个入口的 options，判断 key/id 到底登记成什么。 */
-        const dumpEntries = (when) => {
-          try {
-            const shape = (slot) => (ctx.slots.entries(slot) ?? []).map((entry) => entry?.options ?? {})
-            report(`entries:${when}`, JSON.stringify({
-              panellist: shape('sidebar.panellist'),
-              main: shape('main'),
-            }))
-          } catch (error) {
-            report(`entries:${when}`, error)
-          }
-        }
-        try {
-          setTimeout(() => dumpEntries('late'), 1500)
-        } catch (error) {
-          report('entries:timer', error)
-        }
-        dumpEntries('now')
 
-        // 探针：直接选中工作台，验证「面板 id 已注册 + 整页能渲染」。
-        try {
-          setTimeout(() => {
-            try {
-              service('layout').selectPanel(PANEL_ID)
-              report('selectPanel', 'ok')
-            } catch (error) {
-              report('selectPanel', error)
-            }
-          }, 2000)
-        } catch (error) {
-          report('selectPanel:timer', error)
-        }
 
-        // 生产环境忽略返回值；测试从这里拿纯逻辑（快照 → 行、行 → 周报）。
-        return { buildRows, weeklyDraft, weekRange, refOf, projectOf }
+
+
+        // `apply` 的返回值在 Cordis 里会被当成 disposer：生产环境一律不返回，
+        // 否则插件会在 apply 之后被立刻回收（表现为注册成功但入口秒消失）。
+        if (globalThis.__workbenchTest === true) {
+          return { buildRows, weeklyDraft, weekRange, refOf, projectOf }
+        }
+        return undefined
       },
     }
   },
