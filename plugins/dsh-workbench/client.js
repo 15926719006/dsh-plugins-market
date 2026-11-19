@@ -584,25 +584,42 @@ window.__ModuleLoader__.load({
           id: PANEL_ID,
           order: 6,
           label: '工作台',
-        }, safe('panellist-icon', PanelIcon))
+        }, PanelIcon)
 
-        seat('main', 'main', { name: 'main', key: PANEL_ID }, safe('page', WorkbenchPage))
+        seat('main', 'main', { name: 'main', key: PANEL_ID, id: PANEL_ID }, WorkbenchPage)
 
-        /** 探针：槽位里到底登记了哪些入口 —— 判断「注册成功」与「真的在列表里」的差别。 */
+        /** 探针：直接打印每个入口的 options，判断 key/id 到底登记成什么。 */
         const dumpEntries = (when) => {
           try {
-            const panellist = ctx.slots.entries('sidebar.panellist') ?? []
-            const main = ctx.slots.entries('main') ?? []
+            const shape = (slot) => (ctx.slots.entries(slot) ?? []).map((entry) => entry?.options ?? {})
             report(`entries:${when}`, JSON.stringify({
-              panellist: panellist.map((entry) => entry.id ?? entry.key ?? '?'),
-              main: main.map((entry) => entry.key ?? entry.id ?? '?'),
+              panellist: shape('sidebar.panellist'),
+              main: shape('main'),
             }))
           } catch (error) {
             report(`entries:${when}`, error)
           }
         }
-        ctx.setTimeout(() => dumpEntries('late'), 1200)
+        try {
+          setTimeout(() => dumpEntries('late'), 1500)
+        } catch (error) {
+          report('entries:timer', error)
+        }
         dumpEntries('now')
+
+        // 探针：直接选中工作台，验证「面板 id 已注册 + 整页能渲染」。
+        try {
+          setTimeout(() => {
+            try {
+              service('layout').selectPanel(PANEL_ID)
+              report('selectPanel', 'ok')
+            } catch (error) {
+              report('selectPanel', error)
+            }
+          }, 2000)
+        } catch (error) {
+          report('selectPanel:timer', error)
+        }
 
         // 生产环境忽略返回值；测试从这里拿纯逻辑（快照 → 行、行 → 周报）。
         return { buildRows, weeklyDraft, weekRange, refOf, projectOf }

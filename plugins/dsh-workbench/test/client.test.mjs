@@ -107,7 +107,7 @@ function createCtx({ notes = {}, workRoot = '/Users/me/Desktop/work' } = {}) {
         callback()
       },
       register(spec, Component) {
-        registered.set(spec.id ?? `key:${spec.key}`, Component)
+        registered.set(spec.name, { spec, Component })
         return () => {}
       },
     },
@@ -125,7 +125,10 @@ test('注册「左侧入口」与「整页」两个座位', async () => {
   const { ctx, registered } = createCtx()
   mod.apply(ctx)
   // 左侧入口用 id，整页用 main 的 key，两者必须是同一个面板 id
-  assert.deepEqual([...registered.keys()].sort(), ['key:workbench', 'workbench'])
+  assert.deepEqual([...registered.keys()].sort(), ['main', 'sidebar.panellist'])
+  assert.equal(registered.get('sidebar.panellist').spec.id, 'workbench')
+  assert.equal(registered.get('main').spec.key, 'workbench')
+  assert.equal(registered.get('sidebar.panellist').spec.label, '工作台')
   assert.equal(mod.inject.includes('slots'), true)
 })
 
