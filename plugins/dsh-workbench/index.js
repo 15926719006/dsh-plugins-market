@@ -8,7 +8,7 @@
  * - notes.json  按 sessionId 一行旁注
  * - config.json 工作工作区路径
  */
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -18,6 +18,8 @@ const CONFIG_PATH = join(DIR, 'config.json')
 
 const NOTES_ROUTE = '/api/workbench/notes'
 const CONFIG_ROUTE = '/api/workbench/config'
+const LOG_ROUTE = '/api/workbench/log'
+const LOG_PATH = join(DIR, 'client.log')
 
 /** 旁注里允许写入的字段，其余一律丢弃。 */
 const NOTE_FIELDS = ['outcome', 'next', 'status', 'impact', 'note', 'refs']
@@ -40,6 +42,13 @@ export function apply(ctx) {
     requestBody: 'buffered',
     fetch: (request) => handleConfig(ctx, request),
   }), 'workbench: config route')
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: LOG_ROUTE,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: (request) => handleLog(ctx, request),
+  }), 'workbench: log route')
 }
 
 /** 读 JSON；文件不存在或损坏时返回兜底值。 */
@@ -143,6 +152,20 @@ async function handleNotes(ctx, request) {
   } catch (error) {
     ctx.logger?.warn?.(`workbench: notes route failed: ${error instanceof Error ? error.message : String(error)}`)
     return json({ ok: false, error: 'notes route failed' }, 500)
+  }
+}
+
+/** 客户端把加载/注册异常写回这里，排障用。 */
+async function handleLog(ctx, request) {
+  try {
+    const body = await request.json()
+    const line = `${new Date().toISOString()} ${String(body?.label ?? '?')} ${String(body?.message ?? '')}\n`
+    await mkdir(DIR, { recursive: true })
+    await appendFile(LOG_PATH, line, 'utf8')
+    return json({ ok: true })
+  } catch (error) {
+    ctx.logger?.warn?.(`workbench: log route failed: ${error instanceof Error ? error.message : String(error)}`)
+    return json({ ok: false }, 500)
   }
 }
 

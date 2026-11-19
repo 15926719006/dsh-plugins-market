@@ -36,9 +36,13 @@ function createCtx() {
 
 const call = (route, request) => route.fetch(request)
 
-test('注册两条路由', () => {
+test('注册三条路由', () => {
   const routes = createCtx()
-  assert.deepEqual([...routes.keys()].sort(), ['/api/workbench/config', '/api/workbench/notes'])
+  assert.deepEqual([...routes.keys()].sort(), [
+    '/api/workbench/config',
+    '/api/workbench/log',
+    '/api/workbench/notes',
+  ])
 })
 
 test('写入一条旁注并读回', async () => {

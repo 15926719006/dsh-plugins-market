@@ -15,6 +15,19 @@ window.__ModuleLoader__.load({
     const h = React.createElement
     const { useCallback, useEffect, useState } = React
 
+    /** 排障：把加载与注册的异常打回 Host 写日志，页面控制台看不到时也能查。 */
+    function report(label, message) {
+      try {
+        fetch('/api/workbench/log', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ label, message: message instanceof Error ? `${message.message}\n${message.stack ?? ''}` : String(message) }),
+        })
+      } catch {
+        // 日志本身不能再抛。
+      }
+    }
+
     /** 左侧入口 id，同时也是 `main` 的 key。 */
     const PANEL_ID = 'workbench'
 
@@ -242,6 +255,7 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        report('apply-start', `slots=${ctx.slots === undefined ? 'missing' : 'ok'}`)
         // 服务在渲染时按需取：Web 页启动时这些服务可能还没就绪，
         // 放进模块级 inject 会让整个模块一直等待、静默不执行。
         const service = (name) => {
@@ -523,17 +537,35 @@ window.__ModuleLoader__.load({
           )
         }
 
-        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+        const guard = (label, build) => {
+          try {
+            return ctx.effect(() => {
+              try {
+                return build()
+              } catch (error) {
+                report(`${label}-register`, error)
+                return () => {}
+              }
+            }, label)
+          } catch (error) {
+            report(`${label}-effect`, error)
+            return () => {}
+          }
+        }
+
+        guard('sidebar.panellist', () => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
           name: 'sidebar.panellist',
           id: PANEL_ID,
           order: 25,
           label: () => '工作台',
-        }, PanelIcon)), 'workbench: sidebar entry')
+        }, PanelIcon)))
+        report('sidebar.panellist', 'registered')
 
-        ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
+        guard('main', () => ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
           key: PANEL_ID,
-        }, WorkbenchPage)), 'workbench: page')
+        }, WorkbenchPage)))
+        report('main', 'registered')
 
         // 生产环境忽略返回值；测试从这里拿纯逻辑（快照 → 行、行 → 周报）。
         return { buildRows, weeklyDraft, weekRange, refOf, projectOf }
