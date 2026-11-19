@@ -11,8 +11,13 @@
  * Each moment becomes one small notification record, pushed to every connected
  * browser page over Server-Sent Events at `GET /plugins/task-notify/events`.
  * The page turns a record into a native desktop notification; when no page is
- * connected, or the page reports that the browser refused notifications, the
- * Host posts the same record through macOS `osascript` instead.
+ * connected, or no page can show browser notifications, the Host posts the same
+ * record through macOS `osascript` instead.
+ *
+ * Every record names the Session it came from (`sessionId`), so the page can
+ * select that conversation when the card is clicked, and a record the Host
+ * posted itself says so (`native`): such a card has no click action, and the
+ * page navigates on the next window activation that the click causes.
  *
  * Subagent and teammate sessions are deliberately silent: only sessions the
  * user drives themselves produce a record.

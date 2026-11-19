@@ -247,6 +247,21 @@
       "sortKeys": {
         "recommended": 10
       }
+    },
+    "dsh-workbench": {
+      "title": {
+        "zh": "工作台",
+        "en": "Workbench"
+      },
+      "description": {
+        "zh": "把会话变成可回溯的工作记录：给每个会话挂结论、下一步与单号，一屏看到进行中、未收尾和本周收尾，一键生成周报草稿。",
+        "en": "Turn Sessions into a reviewable work log: attach an outcome, a next step and a devops number to each Session, see what is open, unfinished and finished this week, and draft the weekly report in one click."
+      },
+      "category": "tools",
+      "keywords": [],
+      "sortKeys": {
+        "recommended": 10
+      }
     }
   }
 }

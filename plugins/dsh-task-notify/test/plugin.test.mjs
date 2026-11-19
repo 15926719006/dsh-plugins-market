@@ -106,15 +106,35 @@ function fakeHost(services = {}) {
 }
 
 /**
+ * Report one page's permission through the plugin's handshake route.
+ * @param routes - captured routes.
+ * @param body - what the page says about itself.
+ */
+function hello(routes, body) {
+  const handler = routes.get('/plugins/task-notify/hello')
+  const req = {
+    url: '/plugins/task-notify/hello',
+    method: 'POST',
+    on(name, listener) {
+      if (name === 'data') listener(JSON.stringify(body))
+      if (name === 'end') listener()
+    },
+  }
+  handler(req, { writeHead() {}, end() {}, on() {} })
+}
+
+/**
  * Open the plugin's event stream against a fake HTTP response.
  * @param routes - captured routes.
+ * @param options - page identity and the permission it reports.
  * @returns the chunks the plugin writes, in order.
  */
-function openStream(routes) {
+function openStream(routes, options = {}) {
   const chunks = []
   const handler = routes.get('/plugins/task-notify/events')
+  const page = options.page ?? 'test-page'
   handler(
-    { on() {}, method: 'GET', url: '/plugins/task-notify/events' },
+    { on() {}, method: 'GET', url: `/plugins/task-notify/events?page=${page}` },
     {
       writeHead() {},
       write(chunk) {
@@ -125,6 +145,7 @@ function openStream(routes) {
       on() {},
     },
   )
+  if (options.permission !== undefined) hello(routes, { page, permission: options.permission, lang: 'zh' })
   return chunks
 }
 
@@ -147,7 +168,7 @@ function recordsOf(chunks) {
 test('a completed turn reaches the browser as one finished record', () => {
   const { ctx, routes, listeners } = fakeHost()
   apply(ctx)
-  const chunks = openStream(routes)
+  const chunks = openStream(routes, { permission: 'granted' })
 
   const session = { id: 'session-1', header: { cwd: '/tmp/project' } }
   const push = listeners.get('session/event')
@@ -170,7 +191,7 @@ test('a completed turn reaches the browser as one finished record', () => {
 test('a subagent session and a forked turn stay silent', () => {
   const { ctx, routes, listeners } = fakeHost()
   apply(ctx)
-  const chunks = openStream(routes)
+  const chunks = openStream(routes, { permission: 'granted' })
   const push = listeners.get('session/event')
 
   push({ id: 'child', header: { origin: 'subagent' } }, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
@@ -182,7 +203,7 @@ test('a subagent session and a forked turn stay silent', () => {
 test('waiting for the user also reaches the browser', () => {
   const { ctx, routes, listeners } = fakeHost()
   apply(ctx)
-  const chunks = openStream(routes)
+  const chunks = openStream(routes, { permission: 'granted' })
 
   listeners.get('user-questions/request')({ questions: [{ question: '要不要加一列?' }] }, () => {})
   listeners.get('approval/request')({}, () => {})
@@ -198,7 +219,7 @@ test('waiting for the user also reaches the browser', () => {
 test('the debug route reports what the listener actually saw', async () => {
   const { ctx, routes, listeners } = fakeHost()
   apply(ctx)
-  openStream(routes)
+  openStream(routes, { permission: 'granted' })
   listeners.get('session/event')({ id: 'session-1', header: {} }, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
 
   const handler = routes.get('/plugins/task-notify/debug')
@@ -222,4 +243,58 @@ test('the debug route reports what the listener actually saw', async () => {
   assert.equal(payload.stats.turnEnd.completed, 1)
   assert.equal(payload.stats.emitted, 1)
   assert.deepEqual(payload.stats.errors, [])
+})
+
+test('a page that cannot show a card still learns the Host posted one', () => {
+  const { ctx, routes, listeners } = fakeHost()
+  apply(ctx)
+  const chunks = openStream(routes, { permission: 'denied' })
+
+  listeners.get('session/event')(
+    { id: 'session-1', header: { cwd: '/tmp/project' } },
+    { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+  )
+
+  const [record] = recordsOf(chunks)
+  assert.equal(record.native, true, 'the page must not expect a click of its own')
+  assert.equal(record.label, '任务完成')
+})
+
+test('a page that can show a card owns the click', () => {
+  const { ctx, routes, listeners } = fakeHost()
+  apply(ctx)
+  const chunks = openStream(routes, { permission: 'granted' })
+
+  listeners.get('session/event')(
+    { id: 'session-1', header: { cwd: '/tmp/project' } },
+    { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+  )
+
+  const [record] = recordsOf(chunks)
+  assert.equal(record.native, undefined)
+})
+
+test('waiting for an answer carries the Session that is asking', () => {
+  const sessions = {
+    get(id) {
+      return { id, header: { cwd: '/tmp/报价单项目' } }
+    },
+  }
+  const { ctx, routes, listeners } = fakeHost({ sessions })
+  apply(ctx)
+  const chunks = openStream(routes, { permission: 'granted' })
+
+  const agent = { id: 'session-9' }
+  listeners.get('user-questions/request')({ agent, questions: [{ question: '要加一列吗?' }] }, () => {})
+  listeners.get('approval/request')({ agent, toolName: 'bash' }, () => {})
+
+  const records = recordsOf(chunks)
+  assert.deepEqual(
+    records.map((record) => record.sessionId),
+    ['session-9', 'session-9'],
+  )
+  assert.deepEqual(
+    records.map((record) => record.title),
+    ['报价单项目', '报价单项目'],
+  )
 })
