@@ -18,6 +18,14 @@ const CONFIG_PATH = join(DIR, 'config.json')
 
 const NOTES_ROUTE = '/api/workbench/notes'
 const CONFIG_ROUTE = '/api/workbench/config'
+const REFS_ROUTE = '/api/workbench/refs'
+const REFS_PATH = join(DIR, 'refs.json')
+
+/**
+ * devops 编号。和 `session-rename` 用的那一套一致：需求 RO、任务 T、专项 P、
+ * 缺陷 BUG、issue ON3，子任务带 -S04 后缀。
+ */
+const REF_PATTERN = /\b(RO-\d{8}-\d{3}(?:-S\d+)?|T-\d{8}-\d{3}|P-\d{8}-\d{3}|BUG-\d{8}-\d{3}|ON3-\d+)\b/g
 const LOG_ROUTE = '/api/workbench/log'
 const LOG_PATH = join(DIR, 'client.log')
 
@@ -42,6 +50,13 @@ export function apply(ctx) {
     requestBody: 'buffered',
     fetch: (request) => handleConfig(ctx, request),
   }), 'workbench: config route')
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: REFS_ROUTE,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: (request) => handleRefs(ctx, request),
+  }), 'workbench: refs route')
 
   ctx.effect(() => ctx.connection.fetch.register({
     path: LOG_ROUTE,
@@ -137,21 +152,106 @@ async function handleNotes(ctx, request) {
     }
 
     const body = await request.json()
-    const sessionId = typeof body?.sessionId === 'string' ? body.sessionId : ''
-    if (sessionId === '') return json({ ok: false, error: 'sessionId is required' }, 400)
+    // key 现在有两种：`session:<id>`（未挂单的会话）和 `devops:<单号>`（任务）。
+    const key = typeof body?.key === 'string' && body.key !== ''
+      ? body.key
+      : typeof body?.sessionId === 'string' ? body.sessionId : ''
+    if (key === '') return json({ ok: false, error: 'key is required' }, 400)
 
     const notes = await readNotes()
-    const current = notes[sessionId] !== null && typeof notes[sessionId] === 'object' && notes[sessionId] !== undefined
-      ? notes[sessionId]
+    const current = notes[key] !== null && typeof notes[key] === 'object' && notes[key] !== undefined
+      ? notes[key]
       : {}
     const patch = cleanPatch(body.patch)
-    const next = { ...current, ...patch, sessionId, updatedAt: Date.now(), writtenBy: 'user' }
-    notes[sessionId] = next
+    const next = { ...current, ...patch, key, updatedAt: Date.now(), writtenBy: 'user' }
+    notes[key] = next
     await writeJson(NOTES_PATH, { version: 1, notes })
     return json({ ok: true, note: next })
   } catch (error) {
     ctx.logger?.warn?.(`workbench: notes route failed: ${error instanceof Error ? error.message : String(error)}`)
     return json({ ok: false, error: 'notes route failed' }, 500)
+  }
+}
+
+/** 从一段文本里抠出全部 devops 编号（去重）。 */
+function findRefs(text) {
+  const found = new Set()
+  for (const match of text.matchAll(REF_PATTERN)) found.add(match[1])
+  return [...found]
+}
+
+/**
+ * 读一个会话的正文，找出它提到过的 devops 编号。
+ *
+ * 用整段 JSON 做匹配：会话事件的 payload 形状随类型变化，逐个字段读会把
+ * 以后新增的事件类型漏掉；对字符串做一次正则最稳。
+ */
+async function scanSession(ctx, sessionId) {
+  const query = ctx.get('sessionQuery')
+  if (query === undefined || typeof query.readSession !== 'function') return null
+  const snapshot = await query.readSession(sessionId)
+  const events = Array.isArray(snapshot?.events) ? snapshot.events : []
+  return findRefs(JSON.stringify(events))
+}
+
+/**
+ * 批量给会话找编号。缓存按会话的 updatedAt 失效，所以只有新会话或新消息才会重扫。
+ * 单次请求最多扫 `limit` 个，没扫到的在响应里报出来，客户端下次继续。
+ */
+async function handleRefs(ctx, request) {
+  try {
+    const body = await request.json()
+    const requested = Array.isArray(body?.sessions) ? body.sessions : []
+    const cache = await readJson(REFS_PATH, {})
+    const entries = cache.entries !== null && typeof cache.entries === 'object' && cache.entries !== undefined
+      ? cache.entries
+      : {}
+
+    const refs = {}
+    const pending = []
+    for (const item of requested) {
+      const id = typeof item?.id === 'string' ? item.id : ''
+      if (id === '') continue
+      const updatedAt = typeof item?.updatedAt === 'number' ? item.updatedAt : 0
+      const hit = entries[id]
+      if (hit !== undefined && hit.updatedAt === updatedAt && Array.isArray(hit.refs)) {
+        refs[id] = hit.refs
+        continue
+      }
+      pending.push({ id, updatedAt })
+    }
+
+    const limit = 120
+    const batch = pending.slice(0, limit)
+    let scanned = 0
+    let failed = 0
+    for (const item of batch) {
+      try {
+        const found = await scanSession(ctx, item.id)
+        if (found === null) {
+          failed = batch.length
+          break
+        }
+        entries[item.id] = { updatedAt: item.updatedAt, refs: found }
+        refs[item.id] = found
+        scanned += 1
+      } catch {
+        failed += 1
+      }
+    }
+
+    if (scanned > 0) await writeJson(REFS_PATH, { version: 1, entries })
+    return json({
+      ok: true,
+      refs,
+      scanned,
+      failed,
+      pending: Math.max(0, pending.length - batch.length),
+      hasScanner: ctx.get('sessionQuery') !== undefined,
+    })
+  } catch (error) {
+    ctx.logger?.warn?.(`workbench: refs route failed: ${error instanceof Error ? error.message : String(error)}`)
+    return json({ ok: false, error: 'refs route failed' }, 500)
   }
 }
 

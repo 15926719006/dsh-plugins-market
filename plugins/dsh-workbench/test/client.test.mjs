@@ -125,67 +125,98 @@ test('注册「左侧入口」与「整页」两个座位', async () => {
   const mod = await loadModule()
   const { ctx, registered } = createCtx()
   mod.apply(ctx)
-  // 左侧入口用 id，整页用 main 的 key，两者必须是同一个面板 id
   assert.deepEqual([...registered.keys()].sort(), ['main', 'sidebar.panellist'])
   assert.equal(registered.get('sidebar.panellist').spec.id, 'workbench')
   assert.equal(registered.get('main').spec.key, 'workbench')
   assert.equal(registered.get('sidebar.panellist').spec.label, '工作台')
-  assert.equal(mod.inject.includes('slots'), true)
 })
 
-test('快照 → 行：只收工作目录、排除子智能体与草稿、认单号与收尾状态', async () => {
+/** 造一条会话。 */
+const session = (id, refs, updatedAt = 1000, extra = {}) => ({
+  id,
+  title: `会话 ${id}`,
+  project: 'work',
+  updatedAt,
+  running: false,
+  refs,
+  ...extra,
+})
+
+test('同一个单号出现在多个会话里，只算一个任务', async () => {
   const mod = await loadModule()
-  const { ctx } = createCtx({
-    notes: {
-      'session-work': { outcome: '判定改到后端', next: '等发布窗口' },
-      'session-sub': { next: '补重试测试' },
-    },
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const { tasks, unlinked } = api.groupTasks([
+    session('a', ['RO-20260923-028'], 3000),
+    session('b', ['RO-20260923-028'], 1000),
+    session('c', ['T-20261026-016'], 2000),
+    session('d', [], 1500),
+  ], {})
+
+  assert.equal(tasks.length, 2)
+  const invoice = tasks.find((task) => task.ref === 'RO-20260923-028')
+  assert.equal(invoice.key, 'devops:RO-20260923-028')
+  assert.deepEqual(invoice.sessions.map((item) => item.id).sort(), ['a', 'b'])
+  assert.equal(invoice.sessions[0].id, 'a') // 最近的排前面
+  assert.equal(invoice.updatedAt, 3000)
+  assert.equal(invoice.status, 'open')
+
+  assert.deepEqual(unlinked.map((item) => item.key), ['session:d'])
+})
+
+test('任务结论写在任务上，不看成员会话', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const notes = {
+    'devops:RO-20260923-028': { outcome: '判定改到后端，已上线', next: '观察一周', updatedAt: 5000 },
+  }
+  const { tasks } = api.groupTasks([
+    session('a', ['RO-20260923-028'], 3000),
+    session('b', ['RO-20260923-028'], 1000),
+  ], notes)
+
+  assert.equal(tasks.length, 1)
+  assert.equal(tasks[0].status, 'done')
+  assert.equal(tasks[0].outcome, '判定改到后端，已上线')
+  assert.equal(tasks[0].doneAt, 5000)
+})
+
+test('一条会话提到两个单号，就同时进两个任务', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const { tasks } = api.groupTasks([
+    session('a', ['RO-20260923-028', 'P-20260908-001'], 2000),
+  ], {})
+  assert.deepEqual(tasks.map((task) => task.ref).sort(), ['P-20260908-001', 'RO-20260923-028'])
+})
+
+test('周报草稿按任务写，带上会话数', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const now = Date.now()
+  const { tasks } = api.groupTasks([
+    session('a', ['RO-20260923-028'], now),
+  ], {
+    'devops:RO-20260923-028': { outcome: '已上线', next: '', updatedAt: now },
   })
-  const api = mod.apply(ctx)
-  const rows = api.buildRows({
-    'session-work': { outcome: '判定改到后端', next: '等发布窗口' },
-    'session-sub': { next: '补重试测试' },
-  }, '/Users/me/Desktop/work')
-
-  assert.deepEqual(rows.map((row) => row.id).sort(), ['session-sub', 'session-work'])
-  const work = rows.find((row) => row.id === 'session-work')
-  assert.equal(work.status, 'done')
-  assert.equal(work.ref, 'RO-20260923-028')
-  assert.equal(work.project, 'work')
-  assert.equal(work.next, '等发布窗口')
-
-  const sub = rows.find((row) => row.id === 'session-sub')
-  assert.equal(sub.status, 'open')
-  assert.equal(sub.running, true)
-  assert.equal(sub.ref, null)
-})
-
-test('行 → 周报草稿：本周完成按结论写，未收尾按下一步写', async () => {
-  const mod = await loadModule()
-  const { ctx } = createCtx()
-  const api = mod.apply(ctx)
-  const rows = api.buildRows({}, '/Users/me/Desktop/work')
-  const draft = api.weeklyDraft(rows)
+  const draft = api.weeklyDraft(tasks)
   assert.match(draft, /^## 本周完成/u)
-  assert.match(draft, /## 进行中 \/ 未收尾/u)
+  assert.match(draft, /RO-20260923-028（1 个会话）：已上线/u)
+  assert.match(draft, /## 进行中/u)
 })
 
-test('单号识别覆盖 demand / task / 项目 / 缺陷', async () => {
+test('单号识别与周窗口', async () => {
   const mod = await loadModule()
   const { ctx } = createCtx()
   const api = mod.apply(ctx)
-  assert.equal(api.refOf('RO-20260923-028 发票'), 'RO-20260923-028')
-  assert.equal(api.refOf('T-20261026-016 改重试'), 'T-20261026-016')
-  assert.equal(api.refOf('P-20260908-001 专项'), 'P-20260908-001')
+  assert.equal(api.refOf('见 #demand/RO-20260923-028'), 'RO-20260923-028')
+  assert.equal(api.refOf('RO-20260923-028-S04 子任务'), 'RO-20260923-028-S04')
   assert.equal(api.refOf('顺手改了插件'), null)
-})
 
-test('周窗口是周一到下周一', async () => {
-  const mod = await loadModule()
-  const { ctx } = createCtx()
-  const api = mod.apply(ctx)
-  const wednesday = new Date(2026, 10, 18, 15, 0, 0)
-  const { start, end } = api.weekRange(wednesday)
+  const { start, end } = api.weekRange(new Date(2026, 10, 18, 15, 0, 0))
   const startDate = new Date(start)
   assert.equal(startDate.getDay(), 1)
   assert.equal(startDate.getHours(), 0)

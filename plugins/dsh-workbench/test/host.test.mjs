@@ -13,10 +13,13 @@ process.env.HOME = HOME
 
 const { apply } = await import('../index.js')
 
-/** 造一个只够用的 Host ctx。 */
-function createCtx() {
+/** 造一个只够用的 Host ctx；`sessionQuery` 可选。 */
+function createCtx(sessionQuery) {
   const routes = new Map()
   const ctx = {
+    get(name) {
+      return name === 'sessionQuery' ? sessionQuery : undefined
+    },
     effect(callback) {
       return callback()
     },
@@ -36,12 +39,13 @@ function createCtx() {
 
 const call = (route, request) => route.fetch(request)
 
-test('注册三条路由', () => {
+test('注册四条路由', () => {
   const routes = createCtx()
   assert.deepEqual([...routes.keys()].sort(), [
     '/api/workbench/config',
     '/api/workbench/log',
     '/api/workbench/notes',
+    '/api/workbench/refs',
   ])
 })
 
@@ -103,4 +107,42 @@ test('配置可以改并读回', async () => {
 
   const read = await (await call(config, new Request('http://localhost/api/workbench/config'))).json()
   assert.equal(read.config.workRoot, '/tmp/other')
+})
+
+test('从会话正文里认出 devops 编号，并按 updatedAt 缓存', async () => {
+  const events = [
+    { type: 'user/message', data: { text: '看下 https://devops.ronhan.com/#demand/RO-20260923-028?mode=edit' } },
+    { type: 'tool/result', data: { output: '子任务 RO-20260923-028-S04 和任务 T-20261026-016' } },
+  ]
+  const routes = createCtx({ readSession: async () => ({ events }) })
+  const refs = routes.get('/api/workbench/refs')
+  const post = (body) => call(refs, new Request('http://localhost/api/workbench/refs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }))
+
+  const first = await (await post({ sessions: [{ id: 'session-1', updatedAt: 100 }] })).json()
+  assert.deepEqual(first.refs['session-1'].sort(), ['RO-20260923-028', 'RO-20260923-028-S04', 'T-20261026-016'])
+  assert.equal(first.scanned, 1)
+
+  const second = await (await post({ sessions: [{ id: 'session-1', updatedAt: 100 }] })).json()
+  assert.equal(second.scanned, 0)
+  assert.deepEqual(second.refs['session-1'].sort(), ['RO-20260923-028', 'RO-20260923-028-S04', 'T-20261026-016'])
+
+  const third = await (await post({ sessions: [{ id: 'session-1', updatedAt: 200 }] })).json()
+  assert.equal(third.scanned, 1)
+})
+
+test('没有 sessionQuery 时如实报告，不假装扫过', async () => {
+  const routes = createCtx(undefined)
+  const refs = routes.get('/api/workbench/refs')
+  const response = await call(refs, new Request('http://localhost/api/workbench/refs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessions: [{ id: 'session-1', updatedAt: 1 }] }),
+  }))
+  const body = await response.json()
+  assert.equal(body.hasScanner, false)
+  assert.deepEqual(body.refs, {})
 })
