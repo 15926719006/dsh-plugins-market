@@ -111,7 +111,7 @@ test('配置可以改并读回', async () => {
 
 test('只认用户在谈的那一个单号：工具输出里的编号不算', async () => {
   const events = [
-    { type: 'user/message', data: { text: '看下 https://devops.ronhan.com/#demand/RO-20260923-028?mode=edit' } },
+    { type: 'user/message', data: { text: '看下 https://devops.ronhan.com/#demand/RO-20260923-028?mode=edit', source: { kind: 'user' } } },
     { type: 'tool/result', data: { output: '子任务 RO-20260923-028-S04，另见 T-20261026-016 / P-20260908-001 / ON3-66441' } },
     { type: 'assistant/message', data: { text: '顺手提一下 BUG-20260920-001' } },
   ]
@@ -132,12 +132,29 @@ test('只认用户在谈的那一个单号：工具输出里的编号不算', as
   assert.deepEqual(second.refs['session-1'], ['RO-20260923-028'])
 })
 
-test('用户粘了一整段列表时取第一个；用户没提才看助手；子任务归到父需求', async () => {
+test('注入的上下文（runtime-context / skill-catalog 等）不算用户说话', async () => {
+  const events = [
+    { type: 'user/message', data: { text: 'confluence 里面找下，创新应用部最近在干嘛', source: { kind: 'user' } } },
+    { type: 'user/message', data: { text: 'Current runtime context. RO-20260923-031', source: { kind: 'runtime-context' } } },
+    { type: 'user/message', data: { text: '<system-reminder>RO-20260923-031</system-reminder>', source: { kind: 'agent-instructions' } } },
+  ]
+  const routes = createCtx({ readSession: async () => ({ events }) })
+  const refs = routes.get('/api/workbench/refs')
+  const body = await (await call(refs, new Request('http://localhost/api/workbench/refs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessions: [{ id: 'session-injected', updatedAt: 1 }] }),
+  }))).json()
+  assert.deepEqual(body.refs['session-injected'], [], '注入上下文里的单号不构成本会话的任务')
+})
+
+test('批量消息不命中；后面单独提一个才命中；助手提到的不算', async () => {
   const pasted = [
-    { type: 'user/message', data: { text: '这几个一起看：RO-20261021-010 RO-20261008-004 ON3-59822' } },
+    { type: 'user/message', data: { text: '拉一下这周的单：RO-20261021-010 RO-20261008-004 ON3-59822', source: { kind: 'user' } } },
+    { type: 'user/message', data: { text: '另外 RO-20261021-010 这个今天得收尾', source: { kind: 'user' } } },
   ]
   const assistantOnly = [
-    { type: 'user/message', data: { text: '帮我把这个需求收个尾' } },
+    { type: 'user/message', data: { text: '帮我把这个需求收个尾', source: { kind: 'user' } } },
     { type: 'assistant/message', data: { text: '对应 BO 需求 RO-20260917-099-S04' } },
   ]
   const routes = createCtx({
@@ -153,8 +170,8 @@ test('用户粘了一整段列表时取第一个；用户没提才看助手；�
     ] }),
   }))).json()
 
-  assert.deepEqual(body.refs['session-paste'], ['RO-20261021-010'])
-  assert.deepEqual(body.refs['session-assistant'], ['RO-20260917-099'])
+  assert.deepEqual(body.refs['session-paste'], ['RO-20261021-010'], '批量那条不算，单独提的那条算')
+  assert.deepEqual(body.refs['session-assistant'], [], '助手说过的单号不算用户的任务')
 })
 
 test('没有 sessionQuery 时如实报告，不假装扫过', async () => {

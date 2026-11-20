@@ -287,7 +287,7 @@ window.__ModuleLoader__.load({
       tasks.sort((a, b) => b.updatedAt - a.updatedAt)
 
       const unlinked = sessions
-        .filter((session) => session.refs.length === 0 && session.delegated !== true)
+        .filter((session) => session.refs.length === 0)
         .map((session) => {
           const key = `session:${session.id}`
           const note = notes[key] ?? {}
@@ -354,7 +354,8 @@ window.__ModuleLoader__.load({
             if (summary === undefined || summary === null) continue
             const cwd = typeof summary.cwd === 'string' ? summary.cwd : ''
             if (cwd !== root && !cwd.startsWith(`${root}/`)) continue
-            if (summary.blank === true) continue
+            // 子会话（以及空草稿）不参与：它们由父会话代表，算进来只会重复计数。
+            if (summary.blank === true || summary.origin === 'subagent') continue
             const title = summary.displayTitle ?? id
             rows.push({
               id,
@@ -363,10 +364,7 @@ window.__ModuleLoader__.load({
               project: projectOf(cwd),
               updatedAt: typeof summary.updatedAt === 'number' ? summary.updatedAt : 0,
               running: summary.running === true,
-              // 子智能体会话算同一件事的并行分支：计入任务，但不单独占「未挂单」的位置。
-              delegated: summary.origin === 'subagent',
               refs: [],
-              titleRef: refOf(title),
             })
           }
           rows.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -502,7 +500,6 @@ window.__ModuleLoader__.load({
                     title: session.title,
                   },
                   h('span', { style: styles.memberTitle }, session.title),
-                  session.delegated === true ? h('span', { style: styles.memberMeta }, '子会话') : null,
                   h('span', { style: styles.memberMeta }, `${session.project} · ${md(session.updatedAt)}`),
                   ))
                   : null,
@@ -591,10 +588,7 @@ window.__ModuleLoader__.load({
               const merged = sessions.map((session) => {
                 const found = Array.isArray(refsMap[session.id]) ? refsMap[session.id] : []
                 // 只认一个单号：即使 Host 是旧版把所有编号都返回来，也不让它扩散。
-                const refs = found.length > 0
-                  ? [found[0]]
-                  : session.titleRef === null ? [] : [session.titleRef]
-                return { ...session, refs }
+                return { ...session, refs: found.length > 0 ? [found[0]] : [] }
               })
 
               const grouped = groupTasks(merged, loaded.notes)

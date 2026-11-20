@@ -21,6 +21,9 @@ const CONFIG_ROUTE = '/api/workbench/config'
 const REFS_ROUTE = '/api/workbench/refs'
 const REFS_PATH = join(DIR, 'refs.json')
 
+/** 单号归类规则的版本；改规则就 +1，让旧缓存失效。 */
+const REF_RULE_VERSION = 4
+
 /**
  * devops 编号。和 `session-rename` 用的那一套一致：需求 RO、任务 T、专项 P、
  * 缺陷 BUG、issue ON3，子任务带 -S04 后缀。
@@ -180,13 +183,6 @@ function findRefs(text) {
   return [...found]
 }
 
-/** 事件属于哪一类说话人：只有人和助手的文本算数，工具输出不算。 */
-function speakerOf(type) {
-  if (type.startsWith('user') || type === 'prompt') return 'user'
-  if (type.startsWith('assistant')) return 'assistant'
-  return null
-}
-
 /**
  * 找出一个会话在谈的那**一个**单号。
  *
@@ -203,16 +199,17 @@ async function scanSession(ctx, sessionId) {
   const snapshot = await query.readSession(sessionId)
   const events = Array.isArray(snapshot?.events) ? snapshot.events : []
 
-  const bySpeaker = { user: [], assistant: [] }
   for (const event of events) {
-    const speaker = speakerOf(String(event?.type ?? ''))
-    if (speaker === null) continue
+    if (!String(event?.type ?? '').startsWith('user')) continue
+    // 大量 `user/message` 是注入的上下文（时间、运行时快照、技能清单、AGENTS 规则、
+    // 上级 agent 的消息）；只有 source.kind === 'user' 才是人真正打出来的话。
+    if (event?.data?.source?.kind !== 'user') continue
     const refs = findRefs(JSON.stringify(event?.data ?? {}))
-    if (refs.length > 0) bySpeaker[speaker].push(...refs)
+    // 一条消息里只提到一个单号，才算“我在跟进这件事”。
+    // 提到多个（拉最近一周的单、批量统计、调研）说明是检索而不是跟进，不命中。
+    if (refs.length === 1) return [refs[0]]
   }
-
-  const primary = bySpeaker.user[0] ?? bySpeaker.assistant[0] ?? null
-  return primary === null ? [] : [primary]
+  return []
 }
 
 /**
@@ -224,9 +221,11 @@ async function handleRefs(ctx, request) {
     const body = await request.json()
     const requested = Array.isArray(body?.sessions) ? body.sessions : []
     const cache = await readJson(REFS_PATH, {})
-    const entries = cache.entries !== null && typeof cache.entries === 'object' && cache.entries !== undefined
+    // 规则升版就作废旧缓存：旧规则下的结果会把无关会话挂到同一个任务上。
+    const cachedEntries = cache.entries !== null && typeof cache.entries === 'object' && cache.entries !== undefined
       ? cache.entries
       : {}
+    const entries = cache.rule === REF_RULE_VERSION ? cachedEntries : {}
 
     const refs = {}
     const pending = []
@@ -261,7 +260,7 @@ async function handleRefs(ctx, request) {
       }
     }
 
-    if (scanned > 0) await writeJson(REFS_PATH, { version: 1, entries })
+    if (scanned > 0 || failed === 0) await writeJson(REFS_PATH, { version: 1, rule: REF_RULE_VERSION, entries })
     return json({
       ok: true,
       refs,
