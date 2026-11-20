@@ -363,7 +363,7 @@ export function derivePlatformState(envStatuses) {
       label: ENV_LABEL[env.env] ?? env.env,
       rank: ENV_RANK[env.env],
       done: env.status === 'COMPLETED',
-      completedAt: typeof env.completedAt === 'string' ? env.completedAt : null,
+      completedAt: typeof env.completedAt === 'string' ? (Date.parse(env.completedAt) || null) : null,
     }))
     .sort((a, b) => a.rank - b.rank)
 
@@ -374,9 +374,22 @@ export function derivePlatformState(envStatuses) {
   const online = envs.find((env) => env.env === 'PROD')
   return {
     state,
+    // 时间戳统一成毫秒，界面按本地时区显示，避免 UTC 串到前一天。
     onlineAt: online?.done === true ? online.completedAt : null,
     envs,
   }
+}
+
+/**
+ * 版本单标题里的发布日期：「2026-11-23 常规版本」→ 那天发布。
+ * 这是最可靠的“是否上线”依据：环境状态经常停在 EDITING，而版本单的日期是排期事实。
+ */
+export function deriveFromVersion(versionTitle, now = Date.now()) {
+  const match = /(\d{4})-(\d{2})-(\d{2})/u.exec(String(versionTitle ?? ''))
+  if (match === null) return { at: null, released: false }
+  const at = Date.parse(`${match[1]}-${match[2]}-${match[3]}T00:00:00+08:00`)
+  if (!Number.isFinite(at)) return { at: null, released: false }
+  return { at, released: at <= now }
 }
 
 /** 问平台要一条记录：标题、版本、各环境进度。 */
@@ -403,13 +416,40 @@ async function fetchRecord(ref, credentials, baseUrl) {
       return { ...fallback, title: resolved?.title ?? '' }
     }
     const derived = derivePlatformState(data.envStatuses)
+
+    // 是否上线看「并入的版本单」：标题里的发布日期已经过去，就说明这个版本发了。
+    let plan = null
+    if (typeof data.aggregatedToVersionOrderId === 'string') {
+      try {
+        const versionResponse = await fetch(`${baseUrl}/api/devops/release/order/detail`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ orderId: data.aggregatedToVersionOrderId }),
+        })
+        const versionBody = await versionResponse.json().catch(() => null)
+        const versionTitle = versionBody?.data?.title ?? ''
+        const schedule = deriveFromVersion(versionTitle)
+        plan = {
+          orderId: data.aggregatedToVersionOrderId,
+          title: versionTitle,
+          plannedAt: schedule.at,
+          released: schedule.released,
+        }
+      } catch {
+        plan = null
+      }
+    }
+
+    const releasedByVersion = plan?.released === true
+    const state = releasedByVersion ? 'online' : derived.state
     return {
       title: typeof data.title === 'string' ? data.title : '',
       version: typeof data.version === 'string' ? data.version : null,
-      state: derived.state,
-      stateLabel: STATE_LABEL[derived.state],
-      onlineAt: derived.onlineAt,
+      state,
+      stateLabel: STATE_LABEL[state],
+      onlineAt: releasedByVersion ? (derived.onlineAt ?? plan.plannedAt) : derived.onlineAt,
       envs: derived.envs,
+      plan,
     }
   }
 

@@ -277,11 +277,11 @@ test('周报含「本周上线」，按平台上线日期归周', async () => {
   const { tasks } = api.groupTasks([session('a', ['RO-20260923-028'], now)], {
     'devops:RO-20260923-028': { outcome: '已合并', next: '' },
   }, now)
-  const today = new Date(now).toISOString()
+  const today = now
   const draft = api.weeklyDraft(tasks, { 'RO-20260923-028': { title: 'payment triggered invoice', onlineAt: today } })
   assert.match(draft, /RO-20260923-028 payment triggered invoice.*上线/u)
 
-  const old = new Date(now - 40 * 86400000).toISOString()
+  const old = now - 40 * 86400000
   const oldDraft = api.weeklyDraft(tasks, { 'RO-20260923-028': { title: 'x', onlineAt: old } })
   assert.match(oldDraft, /## 本周上线（平台）\n- （无）/u, '40 天前上线的不算本周')
 })

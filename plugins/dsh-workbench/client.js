@@ -90,7 +90,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 平台记录缺失时的占位，避免卡片里到处判空。 */
-    const EMPTY_RECORD = { title: '', version: null, state: 'unknown', stateLabel: undefined, onlineAt: null, envs: [], url: null }
+    const EMPTY_RECORD = { title: '', version: null, state: 'unknown', stateLabel: undefined, onlineAt: null, envs: [], plan: null, url: null }
 
     /** 平台状态的配色与文案。 */
     const STATE_COLOR = { dev: C.idle, beta: C.warn, test: C.warn, uat: C.warn, online: C.success, unknown: C.label2 }
@@ -375,14 +375,11 @@ window.__ModuleLoader__.load({
       lines.push('', '## 本周上线（平台）')
       const shipped = tasks
         .map((task) => ({ task, record: records[task.ref] }))
-        .filter((item) => item.record !== undefined && typeof item.record.onlineAt === 'string')
-        .filter((item) => {
-          const at = Date.parse(item.record.onlineAt)
-          return Number.isFinite(at) && at >= start && at < end
-        })
+        .filter((item) => item.record !== undefined && typeof item.record.onlineAt === 'number')
+        .filter((item) => item.record.onlineAt >= start && item.record.onlineAt < end)
       if (shipped.length === 0) lines.push('- （无）')
       for (const item of shipped) {
-        lines.push(`- ${item.task.ref}${item.record.title === '' ? '' : ` ${item.record.title}`}（${md(Date.parse(item.record.onlineAt))} 上线）`)
+        lines.push(`- ${item.task.ref}${item.record.title === '' ? '' : ` ${item.record.title}`}（${md(item.record.onlineAt)} 上线）`)
       }
       lines.push('', '## 进行中')
       if (open.length === 0) lines.push('- （无）')
@@ -557,7 +554,7 @@ window.__ModuleLoader__.load({
               record.envs === undefined || record.envs.length === 0 ? null : h('span', { style: styles.envRow },
                 record.envs.map((env) => h('span', {
                   key: env.env,
-                  title: `${env.label}：${env.done ? `已完成 ${env.completedAt === null ? '' : md(Date.parse(env.completedAt))}` : '未完成'}`,
+                  title: `${env.label}：${env.done ? `已完成 ${env.completedAt === null ? '' : md(env.completedAt)}` : '未完成'}`,
                   style: {
                     width: 8,
                     height: 8,
@@ -566,7 +563,10 @@ window.__ModuleLoader__.load({
                   },
                 })),
               ),
-              record.onlineAt === null ? null : h('span', { style: { fontSize: 11, color: C.success, flex: 'none' } }, `上线 ${md(Date.parse(record.onlineAt))}`),
+              record.onlineAt === null ? null : h('span', { style: { fontSize: 11, color: C.success, flex: 'none' } }, `上线 ${md(record.onlineAt)}`),
+              record.onlineAt === null && record.plan?.plannedAt !== null && record.plan?.plannedAt !== undefined
+                ? h('span', { style: { fontSize: 11, color: C.label2, flex: 'none' } }, `计划 ${md(record.plan.plannedAt)} 上线`)
+                : null,
               record.url === null || record.url === undefined ? null : h('button', {
                 style: styles.iconButton,
                 title: '在浏览器里打开这个单',
@@ -609,7 +609,7 @@ window.__ModuleLoader__.load({
               }),
               record.state === 'online' && task.status === 'open' ? h('div', { style: styles.dormantActions },
                 h('span', { style: { fontSize: 11.5, color: C.success } },
-                  `平台已上线${record.onlineAt === null ? '' : ` ${md(Date.parse(record.onlineAt))}`}，待你确认收尾`),
+                  `平台已上线${record.onlineAt === null ? '' : ` ${md(record.onlineAt)}`}，待你确认收尾`),
                 h('button', { style: styles.button, onClick: () => onSave(task.key, { status: 'done' }) }, '确认收尾'),
               ) : null,
               task.dormant === true ? h('div', { style: styles.dormantActions },

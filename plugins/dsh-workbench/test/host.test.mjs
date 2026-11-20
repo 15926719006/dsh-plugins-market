@@ -11,7 +11,7 @@ import test from 'node:test'
 const HOME = mkdtempSync(join(tmpdir(), 'workbench-test-'))
 process.env.HOME = HOME
 
-const { apply, derivePlatformState } = await import('../index.js')
+const { apply, derivePlatformState, deriveFromVersion } = await import('../index.js')
 
 /** 造一个只够用的 Host ctx；`sessionQuery` 可选。 */
 function createCtx(sessionQuery) {
@@ -252,6 +252,19 @@ test('环境进度推出平台状态：取推进最远的那个', () => {
 
   const online = derivePlatformState(envs([['BETA', 'COMPLETED'], ['PROD', 'COMPLETED', '2026-11-19T09:00:00+08:00']]))
   assert.equal(online.state, 'online')
-  assert.equal(online.onlineAt, '2026-11-19T09:00:00+08:00')
+  assert.equal(online.onlineAt, Date.parse('2026-11-19T09:00:00+08:00'))
   assert.equal(online.envs.length, 2, 'SANDBOX 被过滤掉')
+})
+
+test('版本单日期决定是否上线', () => {
+  const now = Date.parse('2026-11-20T12:00:00+08:00')
+  const past = deriveFromVersion('2026-11-09 常规版本', now)
+  assert.equal(past.released, true)
+  assert.equal(past.at, Date.parse('2026-11-09T00:00:00+08:00'))
+
+  const future = deriveFromVersion('2026-11-23 常规版本', now)
+  assert.equal(future.released, false)
+  assert.ok(future.at > now)
+
+  assert.equal(deriveFromVersion('PaymentLink 补齐 Stripe Radar', now).at, null, '没有日期的版本单不判上线')
 })
