@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "把会话变成可回溯的工作记录：给每个会话挂结论、下一步与单号，一屏看到进行中、未收尾和本周收尾，并能一键生成周报草稿。",
+  "description": "个人需求账本：按 devops 单号把会话归成任务，记结论、下一步与投入（会话数、精力、费用），一屏看到进展、休眠与本周上线。",
   "license": "MIT",
   "exports": {
     ".": "./index.js",

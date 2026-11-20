@@ -128,7 +128,7 @@ test('注册「左侧入口」与「整页」两个座位', async () => {
   assert.deepEqual([...registered.keys()].sort(), ['main', 'sidebar.panellist'])
   assert.equal(registered.get('sidebar.panellist').spec.id, 'workbench')
   assert.equal(registered.get('main').spec.key, 'workbench')
-  assert.equal(registered.get('sidebar.panellist').spec.label, '工作台')
+  assert.equal(registered.get('sidebar.panellist').spec.label, '需求账本')
 })
 
 /** 造一条会话。 */

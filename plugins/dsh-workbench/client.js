@@ -514,8 +514,12 @@ window.__ModuleLoader__.load({
             'aria-hidden': 'true',
             style: { display: 'block' },
           },
-          h('rect', { x: 2.8, y: 3.6, width: 18.4, height: 16.8, rx: 4, stroke: 'currentColor', strokeWidth: 1.6 }),
-          h('path', { d: 'M7 9.2h10M7 12.9h6.6M7 16.6h8.4', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }),
+          // 账本：封面 + 书脊 + 三条纪录线
+          h('path', { d: 'M5.2 4.2h10.4a2.6 2.6 0 0 1 2.6 2.6v13H7.8a2.6 2.6 0 0 1-2.6-2.6z', stroke: 'currentColor', strokeWidth: 1.5, strokeLinejoin: 'round' }),
+          h('path', { d: 'M5.2 17.2a2.6 2.6 0 0 1 2.6-2.6h10.4', stroke: 'currentColor', strokeWidth: 1.5, strokeLinejoin: 'round' }),
+          h('path', { d: 'M8.4 8.2h5.2M8.4 11.2h4', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }),
+          // 投入：一根柱
+          h('path', { d: 'M15.2 14.4v1.6', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', opacity: 0.85 }),
           ))
         }
 
@@ -799,7 +803,7 @@ window.__ModuleLoader__.load({
           return h('div', { style: styles.page },
             h('div', { style: styles.shell },
               h('div', { style: styles.header },
-                h('span', { style: styles.h1 }, '工作台'),
+                h('span', { style: styles.h1 }, '需求账本'),
                 h('span', { style: styles.week }, `${md(start)} ~ ${md(end - 1)} · 任务 = 会话正文里出现过的 devops 单号`),
                 h('span', { style: styles.spacer }),
                 h('div', { style: styles.actions },
@@ -927,7 +931,7 @@ window.__ModuleLoader__.load({
           name: 'sidebar.panellist',
           id: PANEL_ID,
           order: 6,
-          label: '工作台',
+          label: '需求账本',
         }, PanelIcon)
 
         seat('main', 'main', { name: 'main', key: PANEL_ID, id: PANEL_ID }, WorkbenchPage)

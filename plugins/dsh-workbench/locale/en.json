@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Workbench",
-    "description": "Turn Sessions into a reviewable work log: attach an outcome, a next step and a devops number to each Session, see what is open, unfinished and finished this week, and draft the weekly report in one click."
+    "title": "Requirement Ledger",
+    "description": "Group Sessions into tasks by their devops number: record the outcome and next step, see platform status, release date, dormancy and effort, and draft the weekly report in one click."
   }
 }
