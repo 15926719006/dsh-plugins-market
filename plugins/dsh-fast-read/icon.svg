@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Fast Read">
+  <defs>
+    <linearGradient id="fr-cover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4c8dff"/>
+      <stop offset="1" stop-color="#2f5fd0"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 14c6-3 12-3 18 0v36c-6-3-12-3-18 0V14z" fill="url(#fr-cover)"/>
+  <path d="M36 14c6-3 12-3 18 0v36c-6-3-12-3-18 0V14z" fill="#8fb6ff"/>
+  <path d="M32 14v36" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <g fill="#ffffff">
+    <circle cx="20" cy="24" r="2.6"/>
+    <circle cx="26" cy="34" r="2.4"/>
+    <circle cx="18" cy="40" r="2"/>
+  </g>
+  <g stroke="#ffffff" stroke-width="1.2" opacity="0.8">
+    <path d="M20 24L26 34M26 34L18 40"/>
+  </g>
+</svg>

@@ -287,6 +287,21 @@
       "labels": [
         "productivity"
       ]
+    },
+    "dsh-fast-read": {
+      "title": {
+        "zh": "速读",
+        "en": "速读"
+      },
+      "description": {
+        "zh": "导入一本书，得到导读、脑图、关系图与知识图谱：每个节点、每条关系都能点回书里的原句，模型编不出来的那种「读懂」。",
+        "en": "把一本书拆成导读、脑图、关系图与带出处的知识图谱：导入 EPUB/PDF/TXT/DOCX，每个节点都能点回原书原句。"
+      },
+      "category": "tools",
+      "keywords": [],
+      "sortKeys": {
+        "recommended": 10
+      }
     }
   }
 }

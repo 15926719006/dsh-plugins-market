@@ -1,0 +1,43 @@
+{
+  "name": "@local/dsh-fast-read",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "把一本书拆成导读、脑图、关系图与带出处的知识图谱：导入 EPUB/PDF/TXT/DOCX，每个节点都能点回原书原句。",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "src/**/*.js",
+    "bin/pdftext.swift",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "CHANGELOG.md",
+    "docs/*.png"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-api-workspace-files"
+      ]
+    }
+  }
+}

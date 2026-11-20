@@ -1,0 +1,5 @@
+# Bundle patch: one Host row that parses books and answers the four model-facing
+# tools, plus the browser half declared through package.json's dsh.client section.
+- insert:
+    - id: fast-read
+      name: '@local/dsh-fast-read'
