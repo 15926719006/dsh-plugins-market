@@ -39,14 +39,31 @@ function createCtx(sessionQuery) {
 
 const call = (route, request) => route.fetch(request)
 
-test('注册四条路由', () => {
+test('注册五条路由', () => {
   const routes = createCtx()
   assert.deepEqual([...routes.keys()].sort(), [
     '/api/workbench/config',
     '/api/workbench/log',
     '/api/workbench/notes',
     '/api/workbench/refs',
+    '/api/workbench/titles',
   ])
+})
+
+test('没有 devops 凭据时标题留空但链接照给', async () => {
+  const routes = createCtx()
+  const titles = routes.get('/api/workbench/titles')
+  const body = await (await call(titles, new Request('http://localhost/api/workbench/titles', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ refs: ['RO-20260923-031', 'T-20261026-016', 'BUG-20260920-001', 'ON3-66441'] }),
+  }))).json()
+  assert.equal(body.ok, true)
+  assert.equal(body.titles['RO-20260923-031'].title, '')
+  assert.match(body.titles['RO-20260923-031'].url, /#demand\/RO-20260923-031$/u)
+  assert.match(body.titles['T-20261026-016'].url, /\/task\/T-20261026-016$/u)
+  assert.match(body.titles['BUG-20260920-001'].url, /\/defect\/BUG-20260920-001$/u)
+  assert.equal(body.titles['ON3-66441'].url, null, 'Jira 的 issue 没有 devops 路由')
 })
 
 test('写入一条旁注并读回', async () => {

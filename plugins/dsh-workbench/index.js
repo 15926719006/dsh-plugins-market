@@ -16,9 +16,17 @@ const DIR = join(homedir(), '.dsh', 'workbench')
 const NOTES_PATH = join(DIR, 'notes.json')
 const CONFIG_PATH = join(DIR, 'config.json')
 
+import { loadDevopsCredentials } from './lib/devops/devops-credentials.mjs'
+import { resolveDevopsTitle } from './lib/devops/devops-resolve.mjs'
+import { kindOfRef } from './lib/devops/devops-refs.mjs'
+
 const NOTES_ROUTE = '/api/workbench/notes'
 const CONFIG_ROUTE = '/api/workbench/config'
 const REFS_ROUTE = '/api/workbench/refs'
+const TITLES_ROUTE = '/api/workbench/titles'
+const TITLES_PATH = join(DIR, 'titles.json')
+/** 标题缓存多久重新取一次；需求标题偶尔会改，但不用每次刷新都问平台。 */
+const TITLE_TTL_MS = 6 * 60 * 60 * 1000
 const REFS_PATH = join(DIR, 'refs.json')
 
 /** 单号归类规则的版本；改规则就 +1，让旧缓存失效。 */
@@ -63,6 +71,13 @@ export function apply(ctx) {
     requestBody: 'buffered',
     fetch: (request) => handleRefs(ctx, request),
   }), 'workbench: refs route')
+
+  ctx.effect(() => ctx.connection.fetch.register({
+    path: TITLES_ROUTE,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: (request) => handleTitles(ctx, request),
+  }), 'workbench: titles route')
 
   ctx.effect(() => ctx.connection.fetch.register({
     path: LOG_ROUTE,
@@ -301,6 +316,65 @@ async function handleRefs(ctx, request) {
   } catch (error) {
     ctx.logger?.warn?.(`workbench: refs route failed: ${error instanceof Error ? error.message : String(error)}`)
     return json({ ok: false, error: 'refs route failed' }, 500)
+  }
+}
+
+/** 打开这条记录的链接。平台的路由按记录类型不同，认不出的就不给链接。 */
+function urlOfRef(baseUrl, ref) {
+  const kind = kindOfRef(ref)
+  const base = String(baseUrl ?? '').replace(/\/+$/u, '')
+  if (kind === 'demand') return `${base}/#demand/${ref}`
+  if (kind === 'task') return `${base}/task/${ref}`
+  if (kind === 'project') return `${base}/#project-management/${ref}`
+  if (kind === 'defect') return `${base}/defect/${ref}`
+  return null
+}
+
+/**
+ * 给每个单号取平台上的标题，界面才不是一串编号。
+ *
+ * 取不到（没配 token、平台慢、记录被删）就如实返回空标题，界面只显示编号，
+ * 不会挡住任何东西。
+ */
+async function handleTitles(ctx, request) {
+  try {
+    const body = await request.json()
+    const requested = Array.isArray(body?.refs) ? body.refs.filter((ref) => typeof ref === 'string' && ref !== '') : []
+    const credentials = loadDevopsCredentials()
+    const cache = await readJson(TITLES_PATH, {})
+    const entries = cache.refs !== null && typeof cache.refs === 'object' && cache.refs !== undefined ? cache.refs : {}
+
+    const titles = {}
+    let fetched = 0
+    const now = Date.now()
+    for (const ref of [...new Set(requested)]) {
+      const hit = entries[ref]
+      if (hit !== undefined && typeof hit.at === 'number' && now - hit.at < TITLE_TTL_MS && typeof hit.title === 'string') {
+        titles[ref] = { title: hit.title, url: hit.url ?? urlOfRef(credentials.baseUrl, ref) }
+        continue
+      }
+      if (credentials.token === '') {
+        titles[ref] = { title: '', url: urlOfRef(credentials.baseUrl, ref) }
+        continue
+      }
+      let title = ''
+      try {
+        const resolved = await resolveDevopsTitle(ref, credentials)
+        title = typeof resolved?.title === 'string' ? resolved.title : ''
+        fetched += 1
+      } catch {
+        title = ''
+      }
+      const url = urlOfRef(credentials.baseUrl, ref)
+      entries[ref] = { title, url, at: now }
+      titles[ref] = { title, url }
+    }
+
+    if (fetched > 0) await writeJson(TITLES_PATH, { version: 1, refs: entries })
+    return json({ ok: true, titles, fetched, hasCredential: credentials.token !== '' })
+  } catch (error) {
+    ctx.logger?.warn?.(`workbench: titles route failed: ${error instanceof Error ? error.message : String(error)}`)
+    return json({ ok: false, error: 'titles route failed' }, 500)
   }
 }
 

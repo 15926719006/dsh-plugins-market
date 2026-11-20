@@ -22,6 +22,7 @@ window.__ModuleLoader__.load({
     const NOTES_ROUTE = '/api/workbench/notes'
     const CONFIG_ROUTE = '/api/workbench/config'
     const REFS_ROUTE = '/api/workbench/refs'
+    const TITLES_ROUTE = '/api/workbench/titles'
 
     /** 兜底：Host 扫不到正文时，退回从会话标题里认编号。 */
     const REF_PATTERN = /\b(RO-\d{8}-\d{3}(?:-S\d+)?|T-\d{8}-\d{3}|P-\d{8}-\d{3}|BUG-\d{8}-\d{3}|ON3-\d{4,})\b/
@@ -174,7 +175,29 @@ window.__ModuleLoader__.load({
         color: C.label1,
         font: '12px/18px ui-monospace, SFMono-Regular, Menlo, monospace',
       },
-      headMeta: { fontSize: 11.5, color: C.label2, display: 'flex', gap: 10, alignItems: 'center' },
+      headMeta: { fontSize: 11.5, color: C.label2, display: 'flex', gap: 10, alignItems: 'center', flex: 'none' },
+      cardTitle: {
+        flex: 1,
+        minWidth: 0,
+        fontSize: 13.5,
+        fontWeight: 550,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      },
+      iconButton: {
+        appearance: 'none',
+        border: `1px solid ${C.border2}`,
+        background: 'transparent',
+        color: C.label2,
+        borderRadius: 6,
+        padding: '0 6px',
+        height: 20,
+        fontSize: 12,
+        lineHeight: '18px',
+        cursor: 'pointer',
+        flex: 'none',
+      },
       statusChip: { flex: 'none', fontSize: 11 },
       cardBody: { padding: '8px 14px 12px' },
       input: {
@@ -390,6 +413,19 @@ window.__ModuleLoader__.load({
           return body
         }
 
+        /** 取每个单号在平台上的标题与链接；取不到就只有编号。 */
+        const loadTitles = async (refs) => {
+          if (refs.length === 0) return {}
+          const response = await fetch(TITLES_ROUTE, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ refs }),
+          })
+          const body = await response.json()
+          if (body?.ok !== true) throw new Error(body?.error ?? '读取标题失败')
+          return body.titles ?? {}
+        }
+
         const saveNote = async (key, patch) => {
           const response = await fetch(NOTES_ROUTE, {
             method: 'POST',
@@ -443,7 +479,7 @@ window.__ModuleLoader__.load({
         }
 
         /** 一个任务：单号 + 成员会话 + 结论/下一步。 */
-        function TaskCard({ task, onSave, onOpen }) {
+        function TaskCard({ task, title, url, onSave, onOpen }) {
           const [outcome, setOutcome] = useState(task.outcome)
           const [next, setNext] = useState(task.next)
           const [expanded, setExpanded] = useState(false)
@@ -466,13 +502,32 @@ window.__ModuleLoader__.load({
           return h('div', { style: styles.card },
             h('div', { style: styles.cardHead },
               h('span', { style: styles.ref }, task.ref),
+              h('span', {
+                style: styles.cardTitle,
+                title: title === '' ? task.ref : title,
+              }, title === '' ? '（取不到标题）' : title),
+              url === null ? null : h('button', {
+                style: styles.iconButton,
+                title: '在浏览器里打开这个单',
+                onClick: () => {
+                  try {
+                    window.open(url, '_blank', 'noopener')
+                  } catch (error) {
+                    report('open-url', error)
+                  }
+                },
+              }, '↗'),
+              h('span', { style: styles.spacer }),
               h('span', { style: styles.headMeta },
                 h('span', null, `${task.sessions.length} 个会话`),
                 h('span', null, `最近 ${md(task.updatedAt)}`),
                 task.running ? h('span', { style: { color: C.success } }, '运行中') : null,
               ),
-              h('span', { style: styles.spacer }),
               h('span', { style: { ...styles.statusChip, color: statusColor } }, statusText),
+              h('button', {
+                style: styles.toggle,
+                onClick: () => onSave(task.key, { status: task.status === 'done' ? 'open' : 'done' }),
+              }, task.status === 'done' ? '重新打开' : '标记收尾'),
             ),
             h('div', { style: styles.cardBody },
               h('input', {
@@ -557,6 +612,7 @@ window.__ModuleLoader__.load({
           const [loading, setLoading] = useState(true)
           const [error, setError] = useState(null)
           const [toast, setToast] = useState(null)
+          const [titles, setTitles] = useState({})
           const [showAll, setShowAll] = useState(false)
           const [showUnlinked, setShowUnlinked] = useState(false)
 
@@ -592,6 +648,12 @@ window.__ModuleLoader__.load({
               })
 
               const grouped = groupTasks(merged, loaded.notes)
+              try {
+                const known = await loadTitles(grouped.tasks.map((task) => task.ref))
+                setTitles(known)
+              } catch (reason) {
+                report('titles', reason)
+              }
               setNotes(loaded.notes)
               setSessions(merged)
               setTasks(grouped.tasks)
@@ -694,7 +756,7 @@ window.__ModuleLoader__.load({
               ),
               error === null ? null : h('div', { style: { ...styles.empty, color: C.error } }, `读取失败：${error}`),
               section('进行中的任务', visibleOpen,
-                (task) => h(TaskCard, { key: task.key, task, onSave, onOpen }),
+                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }),
                 '没有进行中的任务。',
                 hiddenOpen <= 0 ? null : h('button', {
                   style: { ...styles.button, marginTop: 2 },
@@ -702,10 +764,10 @@ window.__ModuleLoader__.load({
                 }, `还有 ${hiddenOpen} 个更早的任务，展开`),
               ),
               section(`本周收尾（${md(start)} ~ ${md(end - 1)}）`, doneThisWeek,
-                (task) => h(TaskCard, { key: task.key, task, onSave, onOpen }),
+                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }),
                 '本周还没有写结论的任务。'),
               doneBefore.length === 0 ? null : section('更早收尾', doneBefore.slice(0, 20),
-                (task) => h(TaskCard, { key: task.key, task, onSave, onOpen }), ''),
+                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }), ''),
               section('未挂单的会话', showUnlinked ? unlinked : [],
                 (session) => h(UnlinkedCard, { key: session.key, session, onSave, onOpen }),
                 showUnlinked ? '没有未挂单的会话。' : '',
