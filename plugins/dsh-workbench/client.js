@@ -89,6 +89,22 @@ window.__ModuleLoader__.load({
       idle: 'var(--dsw-alias-state-idle-primary)',
     }
 
+    /**
+     * 计划结束日 vs 实际上线日：延了/提前了几天。
+     * 只在两边都有日期时给，避免拿计划值冒充事实。
+     */
+    function delayChip(record) {
+      const planned = record?.schedule?.endPlan
+      const online = record?.onlineAt
+      if (typeof planned !== 'number' || typeof online !== 'number') return null
+      const days = Math.round((online - planned) / 86400000)
+      if (days === 0) return null
+      return h('span', {
+        title: `计划 ${md(planned)}，实际上线 ${md(online)}`,
+        style: { fontSize: 11, flex: 'none', color: days > 0 ? C.error : C.label2 },
+      }, days > 0 ? `延期 ${days} 天` : `提前 ${-days} 天`)
+    }
+
     /** 平台记录缺失时的占位，避免卡片里到处判空。 */
     const EMPTY_RECORD = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null, url: null }
 
@@ -220,6 +236,18 @@ window.__ModuleLoader__.load({
       },
       members: { marginTop: 8, borderTop: `1px solid ${C.border1}`, paddingTop: 6 },
       dormantActions: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 },
+      notice: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        margin: '10px 0 0',
+        padding: '8px 12px',
+        border: `1px solid ${C.border2}`,
+        borderRadius: 10,
+        background: C.layer2,
+        fontSize: 12,
+        color: C.label1,
+      },
       stateChip: {
         flex: 'none',
         fontSize: 11,
@@ -313,6 +341,11 @@ window.__ModuleLoader__.load({
         const status = typeof note.status === 'string' && note.status !== ''
           ? note.status
           : outcome !== '' ? 'done' : 'open'
+        const messages = task.sessions.reduce((sum, session) => sum + (session.userMessages ?? 0), 0)
+        const costs = task.sessions.map((session) => session.cost).filter((value) => typeof value === 'number')
+        const firstAt = Math.min(...task.sessions.map((session) => session.firstAt ?? session.updatedAt))
+        const lastAt = Math.max(...task.sessions.map((session) => session.lastAt ?? session.updatedAt))
+        const spanDays = Math.max(0, Math.round((lastAt - firstAt) / 86400000))
         const next = typeof note.next === 'string' ? note.next.trim() : ''
         // 活动时间取「最近一次会话」和「你点过重新关注」里更晚的那个。
         const reviveAt = typeof note.reviveAt === 'number' ? note.reviveAt : 0
@@ -327,6 +360,9 @@ window.__ModuleLoader__.load({
           windowDays,
           dormant: status === 'open' && ageDays > windowDays,
           running: task.sessions.some((session) => session.running),
+          messages,
+          spanDays,
+          cost: costs.length === 0 ? null : costs.reduce((sum, value) => sum + value, 0),
           outcome,
           next,
           status,
@@ -363,7 +399,7 @@ window.__ModuleLoader__.load({
     const SLEEP_DAYS_PLAIN = 7
 
     /** 周报草稿：本周收尾的任务写结论，进行中的写下一步。 */
-    function weeklyDraft(tasks, records = {}) {
+    function weeklyDraft(tasks, records = {}, sessions = []) {
       const { start, end } = weekRange()
       const done = tasks.filter((task) => task.status === 'done' && task.doneAt >= start && task.doneAt < end)
       const open = tasks.filter((task) => task.status === 'open')
@@ -381,6 +417,16 @@ window.__ModuleLoader__.load({
       for (const item of shipped) {
         lines.push(`- ${item.task.ref}${item.record.title === '' ? '' : ` ${item.record.title}`}（${md(item.record.onlineAt)} 上线）`)
       }
+      const weekSessions = sessions.filter((session) => session.updatedAt >= start && session.updatedAt < end)
+      const weekMessages = weekSessions.reduce((sum, session) => sum + (session.userMessages ?? 0), 0)
+      const weekCost = weekSessions
+        .map((session) => session.cost)
+        .filter((value) => typeof value === 'number')
+        .reduce((sum, value) => sum + value, 0)
+      lines.push('', '## 本周投入（本机记账）')
+      lines.push(`- ${weekSessions.length} 个会话 · 我发了 ${weekMessages} 条 · $${weekCost.toFixed(2)}`)
+      if (done.length > 0) lines.push(`- 平均每单 ${(weekSessions.length / done.length).toFixed(1)} 个会话`)
+
       lines.push('', '## 进行中')
       if (open.length === 0) lines.push('- （无）')
       for (const task of open) {
@@ -443,14 +489,14 @@ window.__ModuleLoader__.load({
         }
 
         /** 让 Host 扫会话正文里的单号；标题里认出来的编号也算。 */
-        const loadRefs = async (sessions) => {
+        const loadScan = async (sessions) => {
           const response = await fetch(REFS_ROUTE, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ sessions: sessions.map((session) => ({ id: session.id, updatedAt: session.updatedAt })) }),
           })
           const body = await response.json()
-          if (body?.ok !== true) throw new Error(body?.error ?? '扫描单号失败')
+          if (body?.ok !== true) throw new Error(body?.error ?? '扫描会话失败')
           return body
         }
 
@@ -556,6 +602,7 @@ window.__ModuleLoader__.load({
                 title: record.version === null ? '' : `随 ${record.version} 发布`,
               }, record.statusLabel),
               record.onlineAt === null ? null : h('span', { style: { fontSize: 11, color: C.success, flex: 'none' } }, `上线 ${md(record.onlineAt)}`),
+              delayChip(record),
               record.onlineAt === null && record.plannedAt !== null && record.plannedAt !== undefined
                 ? h('span', { style: { fontSize: 11, color: C.label2, flex: 'none' } }, `计划 ${md(record.plannedAt)} 上线`)
                 : null,
@@ -573,6 +620,9 @@ window.__ModuleLoader__.load({
               h('span', { style: styles.spacer }),
               h('span', { style: styles.headMeta },
                 h('span', null, `${task.sessions.length} 个会话`),
+                h('span', { title: '你自己发的消息条数（不含注入的上下文）' }, `${task.messages} 条消息`),
+                task.spanDays > 0 ? h('span', { title: '首末会话的跨度' }, `跨 ${task.spanDays} 天`) : null,
+                task.cost === null ? null : h('span', { title: '本机记账口径，含子会话与工具调用' }, `$${task.cost.toFixed(2)}`),
                 task.dormant === true
                   ? h('span', null, `最后活动 ${Math.floor(task.ageDays)} 天前`)
                   : h('span', null, `最近 ${md(task.updatedAt)}`),
@@ -622,7 +672,9 @@ window.__ModuleLoader__.load({
                   },
                   h('span', { style: styles.memberTitle }, session.title),
                   session.archived === true ? h('span', { style: styles.memberMeta }, '已归档') : null,
-                  h('span', { style: styles.memberMeta }, `${session.project} · ${md(session.updatedAt)}`),
+                  h('span', { style: styles.memberMeta },
+                    `${session.project} · ${md(session.updatedAt)} · ${session.userMessages ?? 0} 条`,
+                    session.cost === null || session.cost === undefined ? '' : ` · $${session.cost.toFixed(2)}`),
                   ))
                   : null,
               ),
@@ -692,27 +744,35 @@ window.__ModuleLoader__.load({
               setConfig({ workRoot: root })
               const sessions = readSessions(root)
 
-              let refsMap = {}
+              let scannedMap = {}
               let scanned = 0
               let pending = 0
               try {
                 // Host 每轮只扫一批（单轮读上百份日志会让首屏很慢），这里把没扫完的补完。
                 for (let round = 0; round < 20; round += 1) {
-                  const result = await loadRefs(sessions)
-                  refsMap = { ...refsMap, ...(result.refs ?? {}) }
+                  const result = await loadScan(sessions)
+                  scannedMap = { ...scannedMap, ...(result.sessions ?? {}) }
                   scanned += result.scanned ?? 0
                   pending = result.pending ?? 0
                   if (pending === 0) break
                   setScan({ sessions: sessions.length, tasks: 0, scanned, pending })
                 }
               } catch (reason) {
-                report('refs', reason)
+                report('scan', reason)
               }
 
               const merged = sessions.map((session) => {
-                const found = Array.isArray(refsMap[session.id]) ? refsMap[session.id] : []
+                const entry = scannedMap[session.id] ?? {}
+                const found = Array.isArray(entry.refs) ? entry.refs : []
                 // 只认一个单号：即使 Host 是旧版把所有编号都返回来，也不让它扩散。
-                return { ...session, refs: found.length > 0 ? [found[0]] : [] }
+                return {
+                  ...session,
+                  refs: found.length > 0 ? [found[0]] : [],
+                  userMessages: typeof entry.userMessages === 'number' ? entry.userMessages : 0,
+                  firstAt: typeof entry.firstAt === 'number' ? entry.firstAt : session.updatedAt,
+                  lastAt: typeof entry.lastAt === 'number' ? entry.lastAt : session.updatedAt,
+                  cost: typeof entry.cost === 'number' ? entry.cost : null,
+                }
               })
 
               const grouped = groupTasks(merged, loaded.notes)
@@ -811,7 +871,7 @@ window.__ModuleLoader__.load({
                   h('button', {
                     style: styles.primary,
                     onClick: () => {
-                      navigator.clipboard?.writeText(weeklyDraft(tasks, records))
+                      navigator.clipboard?.writeText(weeklyDraft(tasks, records, sessions))
                       setToast('周报草稿已复制')
                     },
                   }, '复制周报草稿'),
@@ -845,6 +905,23 @@ window.__ModuleLoader__.load({
                   h('span', { style: styles.metricLabel }, scan?.pending > 0 ? `正在扫描 ${scan.scanned} 条，还有 ${scan.pending} 条` : '只统计这个目录'),
                 ),
               ),
+              (() => {
+                const now = Date.now()
+                const pendingConfirm = tasks.filter((task) => task.status === 'open' && records[task.ref]?.group === 'done')
+                const shippingSoon = tasks.filter((task) => {
+                  const planned = records[task.ref]?.plannedAt
+                  return task.status === 'open' && typeof planned === 'number' && planned > now - 86400000 && planned - now <= 3 * 86400000
+                })
+                if (pendingConfirm.length === 0 && shippingSoon.length === 0) return null
+                return h('div', { style: styles.notice },
+                  pendingConfirm.length === 0 ? null : h('span', null, `平台已完结待你确认 ${pendingConfirm.length} 个`),
+                  pendingConfirm.length === 0 ? null : h('button', {
+                    style: styles.button,
+                    onClick: () => { for (const task of pendingConfirm) onSave(task.key, { status: 'done' }) },
+                  }, '全部确认收尾'),
+                  shippingSoon.length === 0 ? null : h('span', null, `${shippingSoon.length} 个任务 3 天内上线、还没收尾`),
+                )
+              })(),
               error === null ? null : h('div', { style: { ...styles.empty, color: C.error } }, `读取失败：${error}`),
               section('进行中的任务', visibleOpen,
                 (task) => h(TaskCard, { key: task.key, task, record: records[task.ref] ?? EMPTY_RECORD, onSave, onOpen }),

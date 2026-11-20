@@ -285,3 +285,34 @@ test('周报含「本周上线」，按平台上线日期归周', async () => {
   const oldDraft = api.weeklyDraft(tasks, { 'RO-20260923-028': { title: 'x', onlineAt: old } })
   assert.match(oldDraft, /## 本周上线（平台）\n- （无）/u, '40 天前上线的不算本周')
 })
+
+test('任务聚合投入：会话数、我的消息数、跨度、花费', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const day = 86400000
+  const base = 1000 * 60 * 60 * 24 * 100
+
+  const { tasks } = api.groupTasks([
+    { id: 'a', title: 'A', project: 'work', updatedAt: base, running: false, refs: ['RO-20260923-028'], userMessages: 12, firstAt: base - 3 * day, lastAt: base, cost: 1.5 },
+    { id: 'b', title: 'B', project: 'work', updatedAt: base - 5 * day, running: false, refs: ['RO-20260923-028'], userMessages: 8, firstAt: base - 5 * day, lastAt: base - 5 * day, cost: 0.5 },
+  ], {}, base)
+
+  assert.equal(tasks.length, 1)
+  assert.equal(tasks[0].messages, 20, '两个会话的消息数相加')
+  assert.equal(tasks[0].cost, 2, '费用相加')
+  assert.equal(tasks[0].spanDays, 5, '首末跨度取最早的开始和最晚的结束')
+})
+
+test('周报带「本周投入」段', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const now = Date.now()
+  const sessions = [
+    { id: 'a', title: 'A', project: 'work', updatedAt: now, running: false, refs: ['RO-20260923-028'], userMessages: 9, firstAt: now, lastAt: now, cost: 1.25 },
+  ]
+  const { tasks } = api.groupTasks(sessions, { 'devops:RO-20260923-028': { outcome: '已上线' } }, now)
+  const draft = api.weeklyDraft(tasks, {}, sessions)
+  assert.match(draft, /## 本周投入（本机记账）\n- 1 个会话 · 我发了 9 条 · \$1\.25/u)
+})

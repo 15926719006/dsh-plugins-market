@@ -120,12 +120,14 @@ test('只认用户主动提的那一个单号：工具输出里的编号不算',
   const refs = routes.get('/api/workbench/refs')
 
   const first = await (await call(refs, jsonRequest('http://localhost/api/workbench/refs', { sessions: [{ id: 'session-1', updatedAt: 100 }] }))).json()
-  assert.deepEqual(first.refs['session-1'], ['RO-20260923-028'])
+  assert.deepEqual(first.sessions['session-1'].refs, ['RO-20260923-028'])
   assert.equal(first.scanned, 1)
+  assert.equal(first.sessions['session-1'].userMessages, 1, '只数真实用户消息')
+  assert.equal(first.sessions['session-1'].assistantMessages, 1)
 
   const second = await (await call(refs, jsonRequest('http://localhost/api/workbench/refs', { sessions: [{ id: 'session-1', updatedAt: 100 }] }))).json()
   assert.equal(second.scanned, 0, '同一 updatedAt 走缓存')
-  assert.deepEqual(second.refs['session-1'], ['RO-20260923-028'])
+  assert.deepEqual(second.sessions['session-1'].refs, ['RO-20260923-028'])
 })
 
 test('注入的上下文（runtime-context / agent-instructions）不算用户说话', async () => {
@@ -137,7 +139,7 @@ test('注入的上下文（runtime-context / agent-instructions）不算用户�
   const routes = createCtx({ readSession: async () => ({ events }) })
   const refs = routes.get('/api/workbench/refs')
   const body = await (await call(refs, jsonRequest('http://localhost/api/workbench/refs', { sessions: [{ id: 's', updatedAt: 1 }] }))).json()
-  assert.deepEqual(body.refs['s'], [])
+  assert.deepEqual(body.sessions['s'].refs, [])
 })
 
 test('链接优先：1~2 个取第一个，3 个以上算批量检索', async () => {
@@ -150,8 +152,8 @@ test('链接优先：1~2 个取第一个，3 个以上算批量检索', async ()
   const routes = createCtx({ readSession: async (id) => ({ events: id === 'two' ? twoLinks : batch }) })
   const refs = routes.get('/api/workbench/refs')
   const body = await (await call(refs, jsonRequest('http://localhost/api/workbench/refs', { sessions: [{ id: 'two', updatedAt: 1 }, { id: 'batch', updatedAt: 1 }] }))).json()
-  assert.deepEqual(body.refs['two'], ['RO-20260923-029'])
-  assert.deepEqual(body.refs['batch'], [], '一次贴三条链接属于检索')
+  assert.deepEqual(body.sessions['two'].refs, ['RO-20260923-029'])
+  assert.deepEqual(body.sessions['batch'].refs, [], '一次贴三条链接属于检索')
 })
 
 test('没有链接时，一条消息只提一个编号才算', async () => {
@@ -160,8 +162,8 @@ test('没有链接时，一条消息只提一个编号才算', async () => {
   const routes = createCtx({ readSession: async (id) => ({ events: id === 'one' ? single : many }) })
   const refs = routes.get('/api/workbench/refs')
   const body = await (await call(refs, jsonRequest('http://localhost/api/workbench/refs', { sessions: [{ id: 'one', updatedAt: 1 }, { id: 'many', updatedAt: 1 }] }))).json()
-  assert.deepEqual(body.refs['one'], ['RO-20261026-019'])
-  assert.deepEqual(body.refs['many'], [])
+  assert.deepEqual(body.sessions['one'].refs, ['RO-20261026-019'])
+  assert.deepEqual(body.sessions['many'].refs, [])
 })
 
 test('专项（P-）不作为任务，子任务归到父需求', async () => {
@@ -172,7 +174,7 @@ test('专项（P-）不作为任务，子任务归到父需求', async () => {
   const routes = createCtx({ readSession: async () => ({ events }) })
   const refs = routes.get('/api/workbench/refs')
   const body = await (await call(refs, jsonRequest('http://localhost/api/workbench/refs', { sessions: [{ id: 'p', updatedAt: 1 }] }))).json()
-  assert.deepEqual(body.refs['p'], ['RO-20260923-028'], '专项跳过，接着命中父需求')
+  assert.deepEqual(body.sessions['p'].refs, ['RO-20260923-028'], '专项跳过，接着命中父需求')
 })
 
 test('没有 sessionQuery 时如实报告，不假装扫过', async () => {
@@ -180,17 +182,18 @@ test('没有 sessionQuery 时如实报告，不假装扫过', async () => {
   const refs = routes.get('/api/workbench/refs')
   const body = await (await call(refs, jsonRequest('http://localhost/api/workbench/refs', { sessions: [{ id: 's', updatedAt: 1 }] }))).json()
   assert.equal(body.hasScanner, false)
-  assert.deepEqual(body.refs, {})
+  assert.deepEqual(body.sessions, {})
 })
 
 test('状态直接读平台的 status 字段', () => {
   const demand = readRecord('demand', {
     order: { title: '收银台V1埋点下线', version: 'v2.1.11_2-stable' },
-    demand: { status: 'COMPLETED' },
+    demand: { status: 'COMPLETED', targetStartDate: '2026-10-30', targetEndDate: '2026-11-09' },
   })
   assert.equal(demand.statusLabel, '已完成')
   assert.equal(demand.group, 'done')
   assert.equal(demand.version, 'v2.1.11_2-stable')
+  assert.equal(demand.schedule.endPlan, Date.parse('2026-11-09T00:00:00+08:00'))
 
   assert.equal(readRecord('demand', { order: {}, demand: { status: 'DEVELOPING' } }).statusLabel, '开发中')
   assert.equal(readRecord('demand', { order: {}, demand: { status: 'PENDING_PRODUCT_ACCEPTANCE' } }).statusLabel, '待产品验收')

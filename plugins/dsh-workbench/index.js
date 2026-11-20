@@ -242,24 +242,55 @@ async function scanSession(ctx, sessionId) {
   const snapshot = await query.readSession(sessionId)
   const events = Array.isArray(snapshot?.events) ? snapshot.events : []
 
+  let userMessages = 0
+  let assistantMessages = 0
+  let firstAt = null
+  let lastAt = null
+  let ref = null
   for (const event of events) {
-    if (!String(event?.type ?? '').startsWith('user')) continue
+    if (typeof event?.time === 'number') {
+      if (firstAt === null || event.time < firstAt) firstAt = event.time
+      if (lastAt === null || event.time > lastAt) lastAt = event.time
+    }
+    const type = String(event?.type ?? '')
+    if (type.startsWith('assistant')) assistantMessages += 1
+    if (!type.startsWith('user')) continue
     // 大量 `user/message` 是注入的上下文（时间、运行时快照、技能清单、AGENTS 规则、
     // 上级 agent 的消息）；只有 source.kind === 'user' 才是人真正打出来的话。
     if (event?.data?.source?.kind !== 'user') continue
+    userMessages += 1
+    if (ref !== null) continue
     const text = JSON.stringify(event?.data ?? {})
-
-    // 1) 用户贴了链接：1~2 个链接以第一个为主（第二个常是“复用它的分支”）；
-    //    3 个以上是批量检索（“拉一下这周的单”），不算跟进。
     const links = findLinkRefs(text)
     if (links.length >= 3) continue
-    if (links.length > 0) return [links[0]]
-
-    // 2) 只有裸编号：一条消息里恰好一个，才算在说这件事。
+    if (links.length > 0) {
+      ref = links[0]
+      continue
+    }
     const refs = findRefs(text)
-    if (refs.length === 1) return [refs[0]]
+    if (refs.length === 1) ref = refs[0]
   }
-  return []
+
+  return {
+    refs: ref === null ? [] : [ref],
+    userMessages,
+    assistantMessages,
+    firstAt,
+    lastAt,
+  }
+}
+
+/** 从投影缓存里取这条会话的费用；取不到就是 null。 */
+function costOf(ctx, header) {
+  try {
+    const cache = ctx.get('sessionProjectionCache')
+    if (cache === undefined || typeof cache.cachedSnapshot !== 'function' || header === undefined) return null
+    const snapshot = cache.cachedSnapshot(header)
+    const usage = snapshot?.values?.costUsage ?? snapshot?.rows?.costUsage?.val ?? null
+    return typeof usage?.cost === 'number' ? usage.cost : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -272,20 +303,31 @@ async function handleRefs(ctx, request) {
     const requested = Array.isArray(body?.sessions) ? body.sessions : []
     const cache = await readJson(REFS_PATH, {})
     // 规则升版就作废旧缓存：旧规则下的结果会把无关会话挂到同一个任务上。
+    const headers = {}
+    try {
+      const query = ctx.get('sessionQuery')
+      if (query !== undefined && typeof query.listSessions === 'function') {
+        for (const record of await query.listSessions()) {
+          if (record?.header?.id !== undefined) headers[record.header.id] = record.header
+        }
+      }
+    } catch {
+      // 拿不到 header 就只是没有费用，不影响分类。
+    }
     const cachedEntries = cache.entries !== null && typeof cache.entries === 'object' && cache.entries !== undefined
       ? cache.entries
       : {}
     const entries = cache.rule === REF_RULE_VERSION ? cachedEntries : {}
 
-    const refs = {}
+    const sessions = {}
     const pending = []
     for (const item of requested) {
       const id = typeof item?.id === 'string' ? item.id : ''
       if (id === '') continue
       const updatedAt = typeof item?.updatedAt === 'number' ? item.updatedAt : 0
       const hit = entries[id]
-      if (hit !== undefined && hit.updatedAt === updatedAt && Array.isArray(hit.refs)) {
-        refs[id] = hit.refs
+      if (hit !== undefined && hit.updatedAt === updatedAt && Array.isArray(hit.refs) && typeof hit.userMessages === 'number') {
+        sessions[id] = hit
         continue
       }
       pending.push({ id, updatedAt })
@@ -302,8 +344,9 @@ async function handleRefs(ctx, request) {
           failed = batch.length
           break
         }
-        entries[item.id] = { updatedAt: item.updatedAt, refs: found }
-        refs[item.id] = found
+        const entry = { updatedAt: item.updatedAt, ...found, cost: costOf(ctx, headers[item.id]) }
+        entries[item.id] = entry
+        sessions[item.id] = entry
         scanned += 1
       } catch {
         failed += 1
@@ -313,7 +356,7 @@ async function handleRefs(ctx, request) {
     if (scanned > 0 || failed === 0) await writeJson(REFS_PATH, { version: 1, rule: REF_RULE_VERSION, entries })
     return json({
       ok: true,
-      refs,
+      sessions,
       scanned,
       failed,
       pending: Math.max(0, pending.length - batch.length),
@@ -354,9 +397,18 @@ export function deriveFromVersion(versionTitle, now = Date.now()) {
  * 状态直接用平台自己的字段（中文表取自 `onerway-pmo`）：需求单
  * `data.demand.status`、任务 `data.status`、缺陷 `data.status`。
  */
+/** 「2026-11-09」→ 那天 00:00 的时间戳；解析不了就是 null。 */
+function dayOf(value) {
+  if (typeof value !== 'string' || value === '') return null
+  const match = /(\d{4})-(\d{2})-(\d{2})/u.exec(value)
+  if (match === null) return null
+  const at = Date.parse(`${match[1]}-${match[2]}-${match[3]}T00:00:00+08:00`)
+  return Number.isFinite(at) ? at : null
+}
+
 export function readRecord(kind, data) {
   if (data === null || typeof data !== 'object') {
-    return { title: '', statusCode: '', statusLabel: '', group: 'unknown', version: null }
+    return { title: '', statusCode: '', statusLabel: '', group: 'unknown', version: null, schedule: null }
   }
   if (kind === 'demand') {
     const order = data.order ?? {}
@@ -367,6 +419,12 @@ export function readRecord(kind, data) {
       statusLabel: labelOf(demand.status, DEMAND_STATUS),
       group: groupOf('demand', demand.status),
       version: typeof order.version === 'string' ? order.version : null,
+      // 计划日期：判断“延没延期”的基准。
+      schedule: {
+        start: dayOf(demand.targetStartDate),
+        testPlan: dayOf(demand.planTestDate),
+        endPlan: dayOf(demand.targetEndDate),
+      },
     }
   }
   if (kind === 'task') {
@@ -398,7 +456,7 @@ async function fetchRecord(ref, credentials, baseUrl) {
     'content-type': 'application/json',
   }
   const kind = kindOfRef(ref)
-  const empty = { title: '', statusCode: '', statusLabel: '', group: 'unknown', version: null, onlineAt: null, plannedAt: null, versionTitle: null }
+  const empty = { title: '', statusCode: '', statusLabel: '', group: 'unknown', version: null, schedule: null, onlineAt: null, plannedAt: null, versionTitle: null }
 
   try {
     if (kind === 'demand') {
@@ -465,7 +523,7 @@ async function handleRecords(ctx, request) {
         continue
       }
       if (credentials.token === '') {
-        records[ref] = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null, url }
+        records[ref] = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', schedule: null, onlineAt: null, plannedAt: null, versionTitle: null, url }
         continue
       }
       let record
@@ -473,7 +531,7 @@ async function handleRecords(ctx, request) {
         record = await fetchRecord(ref, credentials, credentials.baseUrl)
         fetched += 1
       } catch {
-        record = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null }
+        record = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', schedule: null, onlineAt: null, plannedAt: null, versionTitle: null }
       }
       entries[ref] = { ...record, at: now }
       records[ref] = { ...record, url }
