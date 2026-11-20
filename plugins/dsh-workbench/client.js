@@ -371,6 +371,7 @@ window.__ModuleLoader__.load({
           const sessions = service('sessions')
           if (sessions?.list?.getSnapshot === undefined) return []
           const byId = sessions.list.getSnapshot().byId ?? {}
+          const archivedIds = new Set(service('workspaces')?.list?.getSnapshot?.()?.archivedSessionIds ?? [])
           const rows = []
           for (const id of Object.keys(byId)) {
             const summary = byId[id]
@@ -383,6 +384,7 @@ window.__ModuleLoader__.load({
             rows.push({
               id,
               title,
+              archived: archivedIds.has(id),
               cwd,
               project: projectOf(cwd),
               updatedAt: typeof summary.updatedAt === 'number' ? summary.updatedAt : 0,
@@ -555,6 +557,7 @@ window.__ModuleLoader__.load({
                     title: session.title,
                   },
                   h('span', { style: styles.memberTitle }, session.title),
+                  session.archived === true ? h('span', { style: styles.memberMeta }, '已归档') : null,
                   h('span', { style: styles.memberMeta }, `${session.project} · ${md(session.updatedAt)}`),
                   ))
                   : null,
@@ -699,7 +702,21 @@ window.__ModuleLoader__.load({
           }, [])
 
           const onOpen = useCallback((sessionId) => {
-            service('uiWorkspace')?.openSession(sessionId)
+            const workspaceApi = service('uiWorkspace')
+            if (workspaceApi === undefined) return
+            const byId = service('sessions')?.list?.getSnapshot?.()?.byId ?? {}
+            if (byId[sessionId] === undefined) {
+              setToast('这个会话不在当前列表里，先点刷新')
+              return
+            }
+            const archived = new Set(service('workspaces')?.list?.getSnapshot?.()?.archivedSessionIds ?? []).has(sessionId)
+            // 已归档的会话打不开；直接 open 会退化成新会话，所以先取消归档。
+            Promise.resolve(archived ? workspaceApi.unarchiveSession(sessionId) : undefined)
+              .then(() => workspaceApi.openSession(sessionId))
+              .catch((error) => {
+                report('open', error)
+                setToast(`打开失败：${error instanceof Error ? error.message : String(error)}`)
+              })
           }, [])
 
           const { start, end } = weekRange()
