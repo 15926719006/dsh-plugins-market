@@ -25,6 +25,9 @@ const NOTES_ROUTE = '/api/workbench/notes'
 const CONFIG_ROUTE = '/api/workbench/config'
 const REFS_ROUTE = '/api/workbench/refs'
 const RECORDS_ROUTE = '/api/workbench/records'
+
+/** 环境推进顺序；SANDBOX 不算进度。 */
+const ENV_ORDER = { BETA: 1, TEST: 2, UAT: 3, PROD: 4 }
 const RECORDS_PATH = join(DIR, 'records.json')
 /** 状态会变，缓存短一点；标题跟着一起缓存也不吃亏。 */
 const RECORD_TTL_MS = 10 * 60 * 1000
@@ -469,9 +472,29 @@ async function fetchRecord(ref, credentials, baseUrl) {
 
   try {
     if (kind === 'demand') {
-      const response = await fetch(`${baseUrl}/api/devops/demand/detail/${ref}`, { headers })
-      const body = await response.json().catch(() => null)
+      const [detail, order] = await Promise.all([
+        fetch(`${baseUrl}/api/devops/demand/detail/${ref}`, { headers }).then((r) => r.json()).catch(() => null),
+        fetch(`${baseUrl}/api/devops/release/order/detail`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ orderId: ref }),
+        }).then((r) => r.json()).catch(() => null),
+      ])
+      const body = detail
       const record = readRecord('demand', body?.data ?? null)
+      // 环境点：提测/上线走到哪个环境，仍然是有用的细节，和平台状态并列显示。
+      record.envs = Array.isArray(order?.data?.envStatuses)
+        ? order.data.envStatuses
+          .filter((env) => ENV_ORDER[env?.env] !== undefined)
+          .map((env) => ({
+            env: env.env,
+            label: ENV_ORDER[env.env],
+            rank: ENV_ORDER[env.env],
+            done: env.status === 'COMPLETED',
+            completedAt: typeof env.completedAt === 'string' ? (Date.parse(env.completedAt) || null) : null,
+          }))
+          .sort((a, b) => a.rank - b.rank)
+        : []
 
       let plannedAt = null
       let versionTitle = null

@@ -106,7 +106,7 @@ window.__ModuleLoader__.load({
     }
 
     /** 平台记录缺失时的占位，避免卡片里到处判空。 */
-    const EMPTY_RECORD = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null, url: null }
+    const EMPTY_RECORD = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null, envs: [], url: null }
 
     /** 平台状态按「完结 / 取消 / 进行中」上色。 */
     const GROUP_COLOR = { done: C.success, cancelled: C.idle, open: C.warn, unknown: C.label2 }
@@ -471,9 +471,19 @@ window.__ModuleLoader__.load({
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ refs }),
           })
-          const body = await response.json()
-          if (body?.ok !== true) throw new Error(body?.error ?? '读取平台状态失败')
-          return body.records ?? {}
+          const body = await response.json().catch(() => null)
+          if (body?.ok === true && body.records !== undefined) return body.records
+          // 旧 Host 只有标题接口：退化成「有标题、无状态」。
+          const legacy = await fetch('/api/workbench/titles', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ refs }),
+          }).then((r) => r.json()).catch(() => null)
+          const records = {}
+          for (const [ref, value] of Object.entries(legacy?.titles ?? {})) {
+            records[ref] = { ...EMPTY_RECORD, title: value?.title ?? '', url: value?.url ?? null }
+          }
+          return records
         }
 
         const saveNote = async (key, patch) => {
@@ -564,6 +574,13 @@ window.__ModuleLoader__.load({
                 style: { ...styles.stateChip, color: GROUP_COLOR[record.group] ?? C.label2, borderColor: GROUP_COLOR[record.group] ?? C.border2 },
                 title: record.version === null ? '' : `随 ${record.version} 发布`,
               }, record.statusLabel),
+              Array.isArray(record.envs) && record.envs.length > 0 ? h('span', { style: styles.envRow },
+                record.envs.map((env) => h('span', {
+                  key: env.env,
+                  title: `${env.label}：${env.done ? `已完成${env.completedAt === null ? '' : ` ${md(env.completedAt)}`}` : '未完成'}`,
+                  style: { width: 7, height: 7, borderRadius: 2, background: env.done ? C.success : C.border2 },
+                })),
+              ) : null,
               record.onlineAt === null ? null : h('span', { style: { fontSize: 11, color: C.success, flex: 'none' } }, `上线 ${md(record.onlineAt)}`),
               delayChip(record),
               record.onlineAt === null && record.plannedAt !== null && record.plannedAt !== undefined
@@ -714,7 +731,15 @@ window.__ModuleLoader__.load({
                 // Host 每轮只扫一批（单轮读上百份日志会让首屏很慢），这里把没扫完的补完。
                 for (let round = 0; round < 20; round += 1) {
                   const result = await loadScan(sessions)
-                  scannedMap = { ...scannedMap, ...(result.sessions ?? {}) }
+                  // 运行中的 Host 可能还是旧版（只返回 refs 映射），两种形状都吃。
+                  const fresh = result.sessions ?? null
+                  if (fresh === null) {
+                    for (const [id, refs] of Object.entries(result.refs ?? {})) {
+                      if (Array.isArray(refs)) scannedMap[id] = { refs }
+                    }
+                  } else {
+                    scannedMap = { ...scannedMap, ...fresh }
+                  }
                   scanned += result.scanned ?? 0
                   pending = result.pending ?? 0
                   if (pending === 0) break
@@ -845,6 +870,10 @@ window.__ModuleLoader__.load({
                 h('div', { style: styles.metric },
                   h('span', { style: { ...styles.metricValue, color: dormantTasks.length === 0 ? C.label1 : C.label2 } }, String(dormantTasks.length)),
                   h('span', { style: styles.metricLabel }, '休眠'),
+                ),
+                h('div', { style: styles.metric },
+                  h('span', { style: styles.metricValue }, String(sessions.length)),
+                  h('span', { style: styles.metricLabel }, '工作目录内会话'),
                 ),
                 h('div', { style: styles.metric },
                   h('span', {
