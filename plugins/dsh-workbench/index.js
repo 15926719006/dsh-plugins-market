@@ -22,7 +22,10 @@ const REFS_ROUTE = '/api/workbench/refs'
 const REFS_PATH = join(DIR, 'refs.json')
 
 /** 单号归类规则的版本；改规则就 +1，让旧缓存失效。 */
-const REF_RULE_VERSION = 4
+const REF_RULE_VERSION = 5
+
+/** devops 链接里的编号（比裸编号更可信：链接是用户主动贴过来的）。 */
+const LINK_REF_PATTERN = /devops\.ronhan\.com\/[^\s"'<>)\]]*?\/([A-Z]{2,4}-\d{4,}(?:-\d{3})?(?:-S\d+)?)/g
 
 /**
  * devops 编号。和 `session-rename` 用的那一套一致：需求 RO、任务 T、专项 P、
@@ -176,10 +179,29 @@ async function handleNotes(ctx, request) {
   }
 }
 
-/** 从一段文本里抠出全部 devops 编号（去重，子任务归到父需求）。 */
+/** 子任务归到父需求；专项（P-）是容器，不作为任务。 */
+function normalizeRef(ref) {
+  const parent = ref.replace(/-S\d+$/u, '')
+  return parent.startsWith('P-') ? null : parent
+}
+
+/** 从一段文本里抠出全部 devops 编号（去重）。 */
 function findRefs(text) {
   const found = new Set()
-  for (const match of text.matchAll(REF_PATTERN)) found.add(match[1].replace(/-S\d+$/u, ''))
+  for (const match of text.matchAll(REF_PATTERN)) {
+    const ref = normalizeRef(match[1])
+    if (ref !== null) found.add(ref)
+  }
+  return [...found]
+}
+
+/** 从一段文本里抠出 devops 链接里的编号（去重）。 */
+function findLinkRefs(text) {
+  const found = new Set()
+  for (const match of text.matchAll(LINK_REF_PATTERN)) {
+    const ref = normalizeRef(match[1])
+    if (ref !== null) found.add(ref)
+  }
   return [...found]
 }
 
@@ -204,9 +226,16 @@ async function scanSession(ctx, sessionId) {
     // 大量 `user/message` 是注入的上下文（时间、运行时快照、技能清单、AGENTS 规则、
     // 上级 agent 的消息）；只有 source.kind === 'user' 才是人真正打出来的话。
     if (event?.data?.source?.kind !== 'user') continue
-    const refs = findRefs(JSON.stringify(event?.data ?? {}))
-    // 一条消息里只提到一个单号，才算“我在跟进这件事”。
-    // 提到多个（拉最近一周的单、批量统计、调研）说明是检索而不是跟进，不命中。
+    const text = JSON.stringify(event?.data ?? {})
+
+    // 1) 用户贴了链接：1~2 个链接以第一个为主（第二个常是“复用它的分支”）；
+    //    3 个以上是批量检索（“拉一下这周的单”），不算跟进。
+    const links = findLinkRefs(text)
+    if (links.length >= 3) continue
+    if (links.length > 0) return [links[0]]
+
+    // 2) 只有裸编号：一条消息里恰好一个，才算在说这件事。
+    const refs = findRefs(text)
     if (refs.length === 1) return [refs[0]]
   }
   return []

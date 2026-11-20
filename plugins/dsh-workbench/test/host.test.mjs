@@ -186,3 +186,35 @@ test('没有 sessionQuery 时如实报告，不假装扫过', async () => {
   assert.equal(body.hasScanner, false)
   assert.deepEqual(body.refs, {})
 })
+
+test('链接优先：一条消息里链接 1~2 个取第一个，3 个以上算批量', async () => {
+  const twoLinks = [
+    { type: 'user/message', data: { source: { kind: 'user' }, text: 'https://devops.ronhan.com/#demand/RO-20260923-029?mode=edit&from=project-management%2FP-20260908-001 做开发设计，前端复用 https://devops.ronhan.com/#demand/RO-20260923-028?mode=edit 这个分支' } },
+  ]
+  const batch = [
+    { type: 'user/message', data: { source: { kind: 'user' }, text: '拉一下这周的单：https://devops.ronhan.com/#demand/RO-20261021-010 https://devops.ronhan.com/#demand/RO-20261008-004 https://devops.ronhan.com/#demand/RO-20261019-012' } },
+  ]
+  const routes = createCtx({ readSession: async (id) => ({ events: id === 'two' ? twoLinks : batch }) })
+  const refs = routes.get('/api/workbench/refs')
+  const body = await (await call(refs, new Request('http://localhost/api/workbench/refs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessions: [{ id: 'two', updatedAt: 1 }, { id: 'batch', updatedAt: 1 }] }),
+  }))).json()
+  assert.deepEqual(body.refs['two'], ['RO-20260923-029'])
+  assert.deepEqual(body.refs['batch'], [], '一次贴三条链接属于检索，不算跟进')
+})
+
+test('专项（P-）不作为任务', async () => {
+  const events = [
+    { type: 'user/message', data: { source: { kind: 'user' }, text: 'https://devops.ronhan.com/#project-management/P-20260908-001 看下这个大项目，参与的前端有哪些' } },
+  ]
+  const routes = createCtx({ readSession: async () => ({ events }) })
+  const refs = routes.get('/api/workbench/refs')
+  const body = await (await call(refs, new Request('http://localhost/api/workbench/refs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessions: [{ id: 'p', updatedAt: 1 }] }),
+  }))).json()
+  assert.deepEqual(body.refs['p'], [])
+})
