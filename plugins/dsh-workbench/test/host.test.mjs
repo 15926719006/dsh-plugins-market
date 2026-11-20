@@ -47,6 +47,14 @@ const jsonRequest = (url, body) => new Request(url, {
   body: JSON.stringify(body),
 })
 
+test('状态只写进临时 HOME，不碰真实 ~/.dsh', async () => {
+  const routes = createCtx()
+  const notes = routes.get('/api/workbench/notes')
+  await call(notes, jsonRequest('http://localhost/api/workbench/notes', { key: 'canary', patch: { outcome: 'x' } }))
+  const { existsSync } = await import('node:fs')
+  assert.equal(existsSync(join(HOME, '.dsh', 'workbench', 'notes.json')), true, '写在临时 HOME 里')
+})
+
 test('注册五条路由', () => {
   const routes = createCtx()
   assert.deepEqual([...routes.keys()].sort(), [
