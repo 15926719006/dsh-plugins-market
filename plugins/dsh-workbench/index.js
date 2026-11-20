@@ -19,6 +19,7 @@ const CONFIG_PATH = join(DIR, 'config.json')
 import { loadDevopsCredentials } from './lib/devops/devops-credentials.mjs'
 import { resolveDevopsTitle } from './lib/devops/devops-resolve.mjs'
 import { kindOfRef } from './lib/devops/devops-refs.mjs'
+import { DEMAND_STATUS, DEFECT_STATUS, TASK_STATUS, groupOf, labelOf } from './lib/devops/labels.mjs'
 
 const NOTES_ROUTE = '/api/workbench/notes'
 const CONFIG_ROUTE = '/api/workbench/config'
@@ -28,17 +29,6 @@ const RECORDS_PATH = join(DIR, 'records.json')
 /** 状态会变，缓存短一点；标题跟着一起缓存也不吃亏。 */
 const RECORD_TTL_MS = 10 * 60 * 1000
 
-/** 环境推进顺序；SANDBOX 不算进度。 */
-const ENV_RANK = { BETA: 1, TEST: 2, UAT: 3, PROD: 4 }
-const ENV_LABEL = { BETA: 'BETA', TEST: 'TEST', UAT: 'UAT', PROD: '生产' }
-const STATE_LABEL = {
-  dev: '开发中',
-  beta: '已提测 BETA',
-  test: '已提测 TEST',
-  uat: '已提测 UAT',
-  online: '已上线',
-  unknown: '平台无发布单',
-}
 const REFS_PATH = join(DIR, 'refs.json')
 
 /** 单号归类规则的版本；改规则就 +1，让旧缓存失效。 */
@@ -347,42 +337,8 @@ function urlOfRef(baseUrl, ref) {
 }
 
 /**
- * 从各环境进度推出平台状态。
- *
- * 平台没有单一的“需求状态”字段，事实藏在发布单每个环境的 `status` 和
- * `completedAt` 里：哪个环境已完成，就说明走到哪一步。取推进得最远的那个。
- */
-export function derivePlatformState(envStatuses) {
-  if (!Array.isArray(envStatuses) || envStatuses.length === 0) {
-    return { state: 'unknown', onlineAt: null, envs: [] }
-  }
-  const envs = envStatuses
-    .filter((env) => ENV_RANK[env?.env] !== undefined)
-    .map((env) => ({
-      env: env.env,
-      label: ENV_LABEL[env.env] ?? env.env,
-      rank: ENV_RANK[env.env],
-      done: env.status === 'COMPLETED',
-      completedAt: typeof env.completedAt === 'string' ? (Date.parse(env.completedAt) || null) : null,
-    }))
-    .sort((a, b) => a.rank - b.rank)
-
-  const furthest = envs.filter((env) => env.done).sort((a, b) => b.rank - a.rank)[0]
-  const state = furthest === undefined
-    ? 'dev'
-    : furthest.env === 'PROD' ? 'online' : furthest.env.toLowerCase()
-  const online = envs.find((env) => env.env === 'PROD')
-  return {
-    state,
-    // 时间戳统一成毫秒，界面按本地时区显示，避免 UTC 串到前一天。
-    onlineAt: online?.done === true ? online.completedAt : null,
-    envs,
-  }
-}
-
-/**
  * 版本单标题里的发布日期：「2026-11-23 常规版本」→ 那天发布。
- * 这是最可靠的“是否上线”依据：环境状态经常停在 EDITING，而版本单的日期是排期事实。
+ * 需求状态只说“完成了”，不说哪天发的，所以上线日期从这里取。
  */
 export function deriveFromVersion(versionTitle, now = Date.now()) {
   const match = /(\d{4})-(\d{2})-(\d{2})/u.exec(String(versionTitle ?? ''))
@@ -392,7 +348,49 @@ export function deriveFromVersion(versionTitle, now = Date.now()) {
   return { at, released: at <= now }
 }
 
-/** 问平台要一条记录：标题、版本、各环境进度。 */
+/**
+ * 从平台返回里读出这条记录的标题与状态。
+ *
+ * 状态直接用平台自己的字段（中文表取自 `onerway-pmo`）：需求单
+ * `data.demand.status`、任务 `data.status`、缺陷 `data.status`。
+ */
+export function readRecord(kind, data) {
+  if (data === null || typeof data !== 'object') {
+    return { title: '', statusCode: '', statusLabel: '', group: 'unknown', version: null }
+  }
+  if (kind === 'demand') {
+    const order = data.order ?? {}
+    const demand = data.demand ?? {}
+    return {
+      title: typeof order.title === 'string' ? order.title : '',
+      statusCode: String(demand.status ?? ''),
+      statusLabel: labelOf(demand.status, DEMAND_STATUS),
+      group: groupOf('demand', demand.status),
+      version: typeof order.version === 'string' ? order.version : null,
+    }
+  }
+  if (kind === 'task') {
+    return {
+      title: typeof data.name === 'string' ? data.name : '',
+      statusCode: String(data.status ?? ''),
+      statusLabel: labelOf(data.status, TASK_STATUS),
+      group: groupOf('task', data.status),
+      version: null,
+    }
+  }
+  if (kind === 'defect') {
+    return {
+      title: typeof data.name === 'string' ? data.name : '',
+      statusCode: String(data.status ?? ''),
+      statusLabel: labelOf(data.status, DEFECT_STATUS),
+      group: groupOf('defect', data.status),
+      version: null,
+    }
+  }
+  return { title: '', statusCode: '', statusLabel: '', group: 'unknown', version: null }
+}
+
+/** 问平台要一条记录：标题、状态、版本，以及能算出来的上线日期。 */
 async function fetchRecord(ref, credentials, baseUrl) {
   const headers = {
     authorization: `Bearer ${credentials.token}`,
@@ -400,66 +398,53 @@ async function fetchRecord(ref, credentials, baseUrl) {
     'content-type': 'application/json',
   }
   const kind = kindOfRef(ref)
-  const fallback = { title: '', version: null, state: 'unknown', stateLabel: STATE_LABEL.unknown, onlineAt: null, envs: [] }
+  const empty = { title: '', statusCode: '', statusLabel: '', group: 'unknown', version: null, onlineAt: null, plannedAt: null, versionTitle: null }
 
-  // 需求/任务/缺陷这些有自己的详情接口；只有带发布单的记录才有环境进度。
-  if (kind === 'demand' || kind === 'release') {
-    const response = await fetch(`${baseUrl}/api/devops/release/order/detail`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ orderId: ref }),
-    })
-    const body = await response.json().catch(() => null)
-    const data = body?.data ?? null
-    if (data === null) {
-      const resolved = await resolveDevopsTitle(ref, credentials).catch(() => null)
-      return { ...fallback, title: resolved?.title ?? '' }
-    }
-    const derived = derivePlatformState(data.envStatuses)
+  try {
+    if (kind === 'demand') {
+      const response = await fetch(`${baseUrl}/api/devops/demand/detail/${ref}`, { headers })
+      const body = await response.json().catch(() => null)
+      const record = readRecord('demand', body?.data ?? null)
 
-    // 是否上线看「并入的版本单」：标题里的发布日期已经过去，就说明这个版本发了。
-    let plan = null
-    if (typeof data.aggregatedToVersionOrderId === 'string') {
-      try {
-        const versionResponse = await fetch(`${baseUrl}/api/devops/release/order/detail`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ orderId: data.aggregatedToVersionOrderId }),
-        })
-        const versionBody = await versionResponse.json().catch(() => null)
-        const versionTitle = versionBody?.data?.title ?? ''
-        const schedule = deriveFromVersion(versionTitle)
-        plan = {
-          orderId: data.aggregatedToVersionOrderId,
-          title: versionTitle,
-          plannedAt: schedule.at,
-          released: schedule.released,
+      let plannedAt = null
+      let versionTitle = null
+      const versionOrderId = body?.data?.order?.aggregatedToVersionOrderId
+      if (typeof versionOrderId === 'string' && versionOrderId !== '') {
+        try {
+          const versionResponse = await fetch(`${baseUrl}/api/devops/release/order/detail`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ orderId: versionOrderId }),
+          })
+          const versionBody = await versionResponse.json().catch(() => null)
+          versionTitle = versionBody?.data?.title ?? null
+          const schedule = deriveFromVersion(versionTitle)
+          if (schedule.at !== null && schedule.released) plannedAt = schedule.at
+        } catch {
+          versionTitle = null
         }
-      } catch {
-        plan = null
       }
+      return { ...record, plannedAt, versionTitle, onlineAt: record.group === 'done' ? plannedAt : null }
     }
-
-    const releasedByVersion = plan?.released === true
-    const state = releasedByVersion ? 'online' : derived.state
-    return {
-      title: typeof data.title === 'string' ? data.title : '',
-      version: typeof data.version === 'string' ? data.version : null,
-      state,
-      stateLabel: STATE_LABEL[state],
-      onlineAt: releasedByVersion ? (derived.onlineAt ?? plan.plannedAt) : derived.onlineAt,
-      envs: derived.envs,
-      plan,
+    if (kind === 'task') {
+      const response = await fetch(`${baseUrl}/api/devops/task/detail/${ref}`, { headers })
+      const body = await response.json().catch(() => null)
+      return { ...empty, ...readRecord('task', body?.data ?? null) }
     }
+    if (kind === 'defect') {
+      const response = await fetch(`${baseUrl}/api/devops/defect/detail/${ref}`, { headers })
+      const body = await response.json().catch(() => null)
+      return { ...empty, ...readRecord('defect', body?.data ?? null) }
+    }
+    const resolved = await resolveDevopsTitle(ref, credentials).catch(() => null)
+    return { ...empty, title: resolved?.title ?? '' }
+  } catch {
+    return empty
   }
-
-  const resolved = await resolveDevopsTitle(ref, credentials).catch(() => null)
-  return { ...fallback, title: resolved?.title ?? '' }
 }
 
 /**
  * 批量取记录状态。缓存 10 分钟：状态变化要能很快看到，但不必每次刷新都问平台。
- * 取不到就返回空标题 + `unknown`，界面不会因此空掉。
  */
 async function handleRecords(ctx, request) {
   try {
@@ -480,7 +465,7 @@ async function handleRecords(ctx, request) {
         continue
       }
       if (credentials.token === '') {
-        records[ref] = { title: '', version: null, state: 'unknown', stateLabel: STATE_LABEL.unknown, onlineAt: null, envs: [], url }
+        records[ref] = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null, url }
         continue
       }
       let record
@@ -488,13 +473,13 @@ async function handleRecords(ctx, request) {
         record = await fetchRecord(ref, credentials, credentials.baseUrl)
         fetched += 1
       } catch {
-        record = { title: '', version: null, state: 'unknown', stateLabel: STATE_LABEL.unknown, onlineAt: null, envs: [] }
+        record = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null }
       }
       entries[ref] = { ...record, at: now }
       records[ref] = { ...record, url }
     }
 
-    if (fetched > 0) await writeJson(RECORDS_PATH, { version: 2, records: entries })
+    if (fetched > 0) await writeJson(RECORDS_PATH, { version: 3, records: entries })
     return json({ ok: true, records, fetched, hasCredential: credentials.token !== '' })
   } catch (error) {
     ctx.logger?.warn?.(`workbench: records route failed: ${error instanceof Error ? error.message : String(error)}`)

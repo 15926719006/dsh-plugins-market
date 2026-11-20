@@ -90,10 +90,10 @@ window.__ModuleLoader__.load({
     }
 
     /** 平台记录缺失时的占位，避免卡片里到处判空。 */
-    const EMPTY_RECORD = { title: '', version: null, state: 'unknown', stateLabel: undefined, onlineAt: null, envs: [], plan: null, url: null }
+    const EMPTY_RECORD = { title: '', version: null, statusCode: '', statusLabel: '', group: 'unknown', onlineAt: null, plannedAt: null, versionTitle: null, url: null }
 
-    /** 平台状态的配色与文案。 */
-    const STATE_COLOR = { dev: C.idle, beta: C.warn, test: C.warn, uat: C.warn, online: C.success, unknown: C.label2 }
+    /** 平台状态按「完结 / 取消 / 进行中」上色。 */
+    const GROUP_COLOR = { done: C.success, cancelled: C.idle, open: C.warn, unknown: C.label2 }
 
     const styles = {
       page: {
@@ -547,25 +547,13 @@ window.__ModuleLoader__.load({
                 style: styles.cardTitle,
                 title: record.title === '' ? task.ref : record.title,
               }, record.title === '' ? '（取不到标题）' : record.title),
-              record.stateLabel === undefined ? null : h('span', {
-                style: { ...styles.stateChip, color: STATE_COLOR[record.state] ?? C.label2, borderColor: STATE_COLOR[record.state] ?? C.border2 },
+              record.statusLabel === '' || record.statusLabel === undefined ? null : h('span', {
+                style: { ...styles.stateChip, color: GROUP_COLOR[record.group] ?? C.label2, borderColor: GROUP_COLOR[record.group] ?? C.border2 },
                 title: record.version === null ? '' : `随 ${record.version} 发布`,
-              }, record.stateLabel),
-              record.envs === undefined || record.envs.length === 0 ? null : h('span', { style: styles.envRow },
-                record.envs.map((env) => h('span', {
-                  key: env.env,
-                  title: `${env.label}：${env.done ? `已完成 ${env.completedAt === null ? '' : md(env.completedAt)}` : '未完成'}`,
-                  style: {
-                    width: 8,
-                    height: 8,
-                    borderRadius: 2,
-                    background: env.done ? C.success : C.border2,
-                  },
-                })),
-              ),
+              }, record.statusLabel),
               record.onlineAt === null ? null : h('span', { style: { fontSize: 11, color: C.success, flex: 'none' } }, `上线 ${md(record.onlineAt)}`),
-              record.onlineAt === null && record.plan?.plannedAt !== null && record.plan?.plannedAt !== undefined
-                ? h('span', { style: { fontSize: 11, color: C.label2, flex: 'none' } }, `计划 ${md(record.plan.plannedAt)} 上线`)
+              record.onlineAt === null && record.plannedAt !== null && record.plannedAt !== undefined
+                ? h('span', { style: { fontSize: 11, color: C.label2, flex: 'none' } }, `计划 ${md(record.plannedAt)} 上线`)
                 : null,
               record.url === null || record.url === undefined ? null : h('button', {
                 style: styles.iconButton,
@@ -607,7 +595,7 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setNext(event.target.value),
                 onBlur: (event) => commit('next', event.target.value),
               }),
-              record.state === 'online' && task.status === 'open' ? h('div', { style: styles.dormantActions },
+              record.group === 'done' && task.status === 'open' ? h('div', { style: styles.dormantActions },
                 h('span', { style: { fontSize: 11.5, color: C.success } },
                   `平台已上线${record.onlineAt === null ? '' : ` ${md(record.onlineAt)}`}，待你确认收尾`),
                 h('button', { style: styles.button, onClick: () => onSave(task.key, { status: 'done' }) }, '确认收尾'),
@@ -840,8 +828,8 @@ window.__ModuleLoader__.load({
                 ),
                 h('div', { style: styles.metric },
                   h('span', {
-                    style: { ...styles.metricValue, color: tasks.filter((task) => task.status === 'open' && records[task.ref]?.state === 'online').length === 0 ? C.label1 : C.success },
-                  }, String(tasks.filter((task) => task.status === 'open' && records[task.ref]?.state === 'online').length)),
+                    style: { ...styles.metricValue, color: tasks.filter((task) => task.status === 'open' && records[task.ref]?.group === 'done').length === 0 ? C.label1 : C.success },
+                  }, String(tasks.filter((task) => task.status === 'open' && records[task.ref]?.group === 'done').length)),
                   h('span', { style: styles.metricLabel }, '平台已上线待确认'),
                 ),
                 h('div', { style: styles.metric },
