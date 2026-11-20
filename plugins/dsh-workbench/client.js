@@ -398,43 +398,6 @@ window.__ModuleLoader__.load({
     const SLEEP_DAYS_WITH_NEXT = 21
     const SLEEP_DAYS_PLAIN = 7
 
-    /** 周报草稿：本周收尾的任务写结论，进行中的写下一步。 */
-    function weeklyDraft(tasks, records = {}, sessions = []) {
-      const { start, end } = weekRange()
-      const done = tasks.filter((task) => task.status === 'done' && task.doneAt >= start && task.doneAt < end)
-      const open = tasks.filter((task) => task.status === 'open')
-      const lines = [`## 本周完成（${md(start)} ~ ${md(end - 1)}）`]
-      if (done.length === 0) lines.push('- （无）')
-      for (const task of done) {
-        lines.push(`- ${task.ref}（${task.sessions.length} 个会话）${task.outcome === '' ? '' : `：${task.outcome}`}`)
-      }
-      lines.push('', '## 本周上线（平台）')
-      const shipped = tasks
-        .map((task) => ({ task, record: records[task.ref] }))
-        .filter((item) => item.record !== undefined && typeof item.record.onlineAt === 'number')
-        .filter((item) => item.record.onlineAt >= start && item.record.onlineAt < end)
-      if (shipped.length === 0) lines.push('- （无）')
-      for (const item of shipped) {
-        lines.push(`- ${item.task.ref}${item.record.title === '' ? '' : ` ${item.record.title}`}（${md(item.record.onlineAt)} 上线）`)
-      }
-      const weekSessions = sessions.filter((session) => session.updatedAt >= start && session.updatedAt < end)
-      const weekMessages = weekSessions.reduce((sum, session) => sum + (session.userMessages ?? 0), 0)
-      const weekCost = weekSessions
-        .map((session) => session.cost)
-        .filter((value) => typeof value === 'number')
-        .reduce((sum, value) => sum + value, 0)
-      lines.push('', '## 本周投入（本机记账）')
-      lines.push(`- ${weekSessions.length} 个会话 · 我发了 ${weekMessages} 条 · $${weekCost.toFixed(2)}`)
-      if (done.length > 0) lines.push(`- 平均每单 ${(weekSessions.length / done.length).toFixed(1)} 个会话`)
-
-      lines.push('', '## 进行中')
-      if (open.length === 0) lines.push('- （无）')
-      for (const task of open) {
-        lines.push(`- ${task.ref}${task.next === '' ? '' : ` → ${task.next}`}`)
-      }
-      return lines.join('\n')
-    }
-
     return {
       inject: ['slots'],
       apply(ctx) {
@@ -868,13 +831,6 @@ window.__ModuleLoader__.load({
                 h('span', { style: styles.spacer }),
                 h('div', { style: styles.actions },
                   h('button', { style: styles.button, onClick: refresh, disabled: loading }, loading ? '刷新中…' : '刷新'),
-                  h('button', {
-                    style: styles.primary,
-                    onClick: () => {
-                      navigator.clipboard?.writeText(weeklyDraft(tasks, records, sessions))
-                      setToast('周报草稿已复制')
-                    },
-                  }, '复制周报草稿'),
                 ),
               ),
               h('div', { style: styles.summary },
@@ -1031,7 +987,7 @@ window.__ModuleLoader__.load({
 
         // `apply` 的返回值会被 Cordis 当成 disposer：生产环境一律不返回。
         if (globalThis.__workbenchTest === true) {
-          return { groupTasks, weeklyDraft, weekRange, refOf, projectOf }
+          return { groupTasks, weekRange, refOf, projectOf }
         }
         return undefined
       },

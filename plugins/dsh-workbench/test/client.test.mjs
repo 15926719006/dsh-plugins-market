@@ -192,23 +192,6 @@ test('一条会话提到两个单号，就同时进两个任务', async () => {
   assert.deepEqual(tasks.map((task) => task.ref).sort(), ['P-20260908-001', 'RO-20260923-028'])
 })
 
-test('周报草稿按任务写，带上会话数', async () => {
-  const mod = await loadModule()
-  const { ctx } = createCtx()
-  const api = mod.apply(ctx)
-  const now = Date.now()
-  const { tasks } = api.groupTasks([
-    session('a', ['RO-20260923-028'], now),
-  ], {
-    'devops:RO-20260923-028': { outcome: '已上线', next: '', updatedAt: now },
-  })
-  const draft = api.weeklyDraft(tasks, {})
-  assert.match(draft, /^## 本周完成/u)
-  assert.match(draft, /RO-20260923-028（1 个会话）：已上线/u)
-  assert.match(draft, /## 本周上线（平台）/u)
-  assert.match(draft, /## 进行中/u)
-})
-
 test('单号识别与周窗口', async () => {
   const mod = await loadModule()
   const { ctx } = createCtx()
@@ -269,23 +252,6 @@ test('收尾的任务不算休眠', async () => {
   assert.equal(tasks[0].dormant, false)
 })
 
-test('周报含「本周上线」，按平台上线日期归周', async () => {
-  const mod = await loadModule()
-  const { ctx } = createCtx()
-  const api = mod.apply(ctx)
-  const now = Date.now()
-  const { tasks } = api.groupTasks([session('a', ['RO-20260923-028'], now)], {
-    'devops:RO-20260923-028': { outcome: '已合并', next: '' },
-  }, now)
-  const today = now
-  const draft = api.weeklyDraft(tasks, { 'RO-20260923-028': { title: 'payment triggered invoice', onlineAt: today } })
-  assert.match(draft, /RO-20260923-028 payment triggered invoice.*上线/u)
-
-  const old = now - 40 * 86400000
-  const oldDraft = api.weeklyDraft(tasks, { 'RO-20260923-028': { title: 'x', onlineAt: old } })
-  assert.match(oldDraft, /## 本周上线（平台）\n- （无）/u, '40 天前上线的不算本周')
-})
-
 test('任务聚合投入：会话数、我的消息数、跨度、花费', async () => {
   const mod = await loadModule()
   const { ctx } = createCtx()
@@ -304,15 +270,3 @@ test('任务聚合投入：会话数、我的消息数、跨度、花费', async
   assert.equal(tasks[0].spanDays, 5, '首末跨度取最早的开始和最晚的结束')
 })
 
-test('周报带「本周投入」段', async () => {
-  const mod = await loadModule()
-  const { ctx } = createCtx()
-  const api = mod.apply(ctx)
-  const now = Date.now()
-  const sessions = [
-    { id: 'a', title: 'A', project: 'work', updatedAt: now, running: false, refs: ['RO-20260923-028'], userMessages: 9, firstAt: now, lastAt: now, cost: 1.25 },
-  ]
-  const { tasks } = api.groupTasks(sessions, { 'devops:RO-20260923-028': { outcome: '已上线' } }, now)
-  const draft = api.weeklyDraft(tasks, {}, sessions)
-  assert.match(draft, /## 本周投入（本机记账）\n- 1 个会话 · 我发了 9 条 · \$1\.25/u)
-})
