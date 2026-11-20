@@ -202,9 +202,10 @@ test('周报草稿按任务写，带上会话数', async () => {
   ], {
     'devops:RO-20260923-028': { outcome: '已上线', next: '', updatedAt: now },
   })
-  const draft = api.weeklyDraft(tasks)
+  const draft = api.weeklyDraft(tasks, {})
   assert.match(draft, /^## 本周完成/u)
   assert.match(draft, /RO-20260923-028（1 个会话）：已上线/u)
+  assert.match(draft, /## 本周上线（平台）/u)
   assert.match(draft, /## 进行中/u)
 })
 
@@ -266,4 +267,21 @@ test('收尾的任务不算休眠', async () => {
     'devops:RO-20260923-028': { status: 'done', outcome: '已上线' },
   }, now)
   assert.equal(tasks[0].dormant, false)
+})
+
+test('周报含「本周上线」，按平台上线日期归周', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const now = Date.now()
+  const { tasks } = api.groupTasks([session('a', ['RO-20260923-028'], now)], {
+    'devops:RO-20260923-028': { outcome: '已合并', next: '' },
+  }, now)
+  const today = new Date(now).toISOString()
+  const draft = api.weeklyDraft(tasks, { 'RO-20260923-028': { title: 'payment triggered invoice', onlineAt: today } })
+  assert.match(draft, /RO-20260923-028 payment triggered invoice.*上线/u)
+
+  const old = new Date(now - 40 * 86400000).toISOString()
+  const oldDraft = api.weeklyDraft(tasks, { 'RO-20260923-028': { title: 'x', onlineAt: old } })
+  assert.match(oldDraft, /## 本周上线（平台）\n- （无）/u, '40 天前上线的不算本周')
 })

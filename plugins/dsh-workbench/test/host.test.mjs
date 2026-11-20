@@ -11,7 +11,7 @@ import test from 'node:test'
 const HOME = mkdtempSync(join(tmpdir(), 'workbench-test-'))
 process.env.HOME = HOME
 
-const { apply } = await import('../index.js')
+const { apply, derivePlatformState } = await import('../index.js')
 
 /** 造一个只够用的 Host ctx；`sessionQuery` 可选。 */
 function createCtx(sessionQuery) {
@@ -45,25 +45,26 @@ test('注册五条路由', () => {
     '/api/workbench/config',
     '/api/workbench/log',
     '/api/workbench/notes',
+    '/api/workbench/records',
     '/api/workbench/refs',
-    '/api/workbench/titles',
   ])
 })
 
-test('没有 devops 凭据时标题留空但链接照给', async () => {
+test('没有 devops 凭据时记录留空但链接照给', async () => {
   const routes = createCtx()
-  const titles = routes.get('/api/workbench/titles')
-  const body = await (await call(titles, new Request('http://localhost/api/workbench/titles', {
+  const records = routes.get('/api/workbench/records')
+  const body = await (await call(records, new Request('http://localhost/api/workbench/records', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ refs: ['RO-20260923-031', 'T-20261026-016', 'BUG-20260920-001', 'ON3-66441'] }),
   }))).json()
   assert.equal(body.ok, true)
-  assert.equal(body.titles['RO-20260923-031'].title, '')
-  assert.match(body.titles['RO-20260923-031'].url, /#demand\/RO-20260923-031$/u)
-  assert.match(body.titles['T-20261026-016'].url, /\/task\/T-20261026-016$/u)
-  assert.match(body.titles['BUG-20260920-001'].url, /\/defect\/BUG-20260920-001$/u)
-  assert.equal(body.titles['ON3-66441'].url, null, 'Jira 的 issue 没有 devops 路由')
+  assert.equal(body.records['RO-20260923-031'].title, '')
+  assert.equal(body.records['RO-20260923-031'].state, 'unknown')
+  assert.match(body.records['RO-20260923-031'].url, /#demand\/RO-20260923-031$/u)
+  assert.match(body.records['T-20261026-016'].url, /\/task\/T-20261026-016$/u)
+  assert.match(body.records['BUG-20260920-001'].url, /\/defect\/BUG-20260920-001$/u)
+  assert.equal(body.records['ON3-66441'].url, null, 'Jira 的 issue 没有 devops 路由')
 })
 
 test('写入一条旁注并读回', async () => {
@@ -234,4 +235,23 @@ test('专项（P-）不作为任务', async () => {
     body: JSON.stringify({ sessions: [{ id: 'p', updatedAt: 1 }] }),
   }))).json()
   assert.deepEqual(body.refs['p'], [])
+})
+
+test('环境进度推出平台状态：取推进最远的那个', () => {
+  const envs = (list) => list.map(([env, status, date]) => ({ env, status, completedAt: date ?? null }))
+
+  assert.equal(derivePlatformState([]).state, 'unknown')
+  assert.equal(derivePlatformState(envs([['BETA', 'EDITING'], ['TEST', 'EDITING'], ['PROD', 'EDITING'], ['SANDBOX', 'COMPLETED']])).state, 'dev', 'SANDBOX 不算进度')
+
+  const beta = derivePlatformState(envs([['BETA', 'COMPLETED', '2026-11-17T10:00:00+08:00'], ['TEST', 'EDITING'], ['PROD', 'EDITING']]))
+  assert.equal(beta.state, 'beta')
+  assert.equal(beta.onlineAt, null)
+
+  const uat = derivePlatformState(envs([['BETA', 'COMPLETED'], ['TEST', 'EDITING'], ['UAT', 'COMPLETED', '2026-11-18T10:00:00+08:00'], ['PROD', 'EDITING']]))
+  assert.equal(uat.state, 'uat', '不看 TEST，取 UAT 这个更远的')
+
+  const online = derivePlatformState(envs([['BETA', 'COMPLETED'], ['PROD', 'COMPLETED', '2026-11-19T09:00:00+08:00']]))
+  assert.equal(online.state, 'online')
+  assert.equal(online.onlineAt, '2026-11-19T09:00:00+08:00')
+  assert.equal(online.envs.length, 2, 'SANDBOX 被过滤掉')
 })

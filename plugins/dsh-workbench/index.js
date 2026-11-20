@@ -23,10 +23,22 @@ import { kindOfRef } from './lib/devops/devops-refs.mjs'
 const NOTES_ROUTE = '/api/workbench/notes'
 const CONFIG_ROUTE = '/api/workbench/config'
 const REFS_ROUTE = '/api/workbench/refs'
-const TITLES_ROUTE = '/api/workbench/titles'
-const TITLES_PATH = join(DIR, 'titles.json')
-/** 标题缓存多久重新取一次；需求标题偶尔会改，但不用每次刷新都问平台。 */
-const TITLE_TTL_MS = 6 * 60 * 60 * 1000
+const RECORDS_ROUTE = '/api/workbench/records'
+const RECORDS_PATH = join(DIR, 'records.json')
+/** 状态会变，缓存短一点；标题跟着一起缓存也不吃亏。 */
+const RECORD_TTL_MS = 10 * 60 * 1000
+
+/** 环境推进顺序；SANDBOX 不算进度。 */
+const ENV_RANK = { BETA: 1, TEST: 2, UAT: 3, PROD: 4 }
+const ENV_LABEL = { BETA: 'BETA', TEST: 'TEST', UAT: 'UAT', PROD: '生产' }
+const STATE_LABEL = {
+  dev: '开发中',
+  beta: '已提测 BETA',
+  test: '已提测 TEST',
+  uat: '已提测 UAT',
+  online: '已上线',
+  unknown: '平台无发布单',
+}
 const REFS_PATH = join(DIR, 'refs.json')
 
 /** 单号归类规则的版本；改规则就 +1，让旧缓存失效。 */
@@ -73,11 +85,11 @@ export function apply(ctx) {
   }), 'workbench: refs route')
 
   ctx.effect(() => ctx.connection.fetch.register({
-    path: TITLES_ROUTE,
+    path: RECORDS_ROUTE,
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: (request) => handleTitles(ctx, request),
-  }), 'workbench: titles route')
+    fetch: (request) => handleRecords(ctx, request),
+  }), 'workbench: records route')
 
   ctx.effect(() => ctx.connection.fetch.register({
     path: LOG_ROUTE,
@@ -335,50 +347,118 @@ function urlOfRef(baseUrl, ref) {
 }
 
 /**
- * 给每个单号取平台上的标题，界面才不是一串编号。
+ * 从各环境进度推出平台状态。
  *
- * 取不到（没配 token、平台慢、记录被删）就如实返回空标题，界面只显示编号，
- * 不会挡住任何东西。
+ * 平台没有单一的“需求状态”字段，事实藏在发布单每个环境的 `status` 和
+ * `completedAt` 里：哪个环境已完成，就说明走到哪一步。取推进得最远的那个。
  */
-async function handleTitles(ctx, request) {
+export function derivePlatformState(envStatuses) {
+  if (!Array.isArray(envStatuses) || envStatuses.length === 0) {
+    return { state: 'unknown', onlineAt: null, envs: [] }
+  }
+  const envs = envStatuses
+    .filter((env) => ENV_RANK[env?.env] !== undefined)
+    .map((env) => ({
+      env: env.env,
+      label: ENV_LABEL[env.env] ?? env.env,
+      rank: ENV_RANK[env.env],
+      done: env.status === 'COMPLETED',
+      completedAt: typeof env.completedAt === 'string' ? env.completedAt : null,
+    }))
+    .sort((a, b) => a.rank - b.rank)
+
+  const furthest = envs.filter((env) => env.done).sort((a, b) => b.rank - a.rank)[0]
+  const state = furthest === undefined
+    ? 'dev'
+    : furthest.env === 'PROD' ? 'online' : furthest.env.toLowerCase()
+  const online = envs.find((env) => env.env === 'PROD')
+  return {
+    state,
+    onlineAt: online?.done === true ? online.completedAt : null,
+    envs,
+  }
+}
+
+/** 问平台要一条记录：标题、版本、各环境进度。 */
+async function fetchRecord(ref, credentials, baseUrl) {
+  const headers = {
+    authorization: `Bearer ${credentials.token}`,
+    accept: 'application/json',
+    'content-type': 'application/json',
+  }
+  const kind = kindOfRef(ref)
+  const fallback = { title: '', version: null, state: 'unknown', stateLabel: STATE_LABEL.unknown, onlineAt: null, envs: [] }
+
+  // 需求/任务/缺陷这些有自己的详情接口；只有带发布单的记录才有环境进度。
+  if (kind === 'demand' || kind === 'release') {
+    const response = await fetch(`${baseUrl}/api/devops/release/order/detail`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ orderId: ref }),
+    })
+    const body = await response.json().catch(() => null)
+    const data = body?.data ?? null
+    if (data === null) {
+      const resolved = await resolveDevopsTitle(ref, credentials).catch(() => null)
+      return { ...fallback, title: resolved?.title ?? '' }
+    }
+    const derived = derivePlatformState(data.envStatuses)
+    return {
+      title: typeof data.title === 'string' ? data.title : '',
+      version: typeof data.version === 'string' ? data.version : null,
+      state: derived.state,
+      stateLabel: STATE_LABEL[derived.state],
+      onlineAt: derived.onlineAt,
+      envs: derived.envs,
+    }
+  }
+
+  const resolved = await resolveDevopsTitle(ref, credentials).catch(() => null)
+  return { ...fallback, title: resolved?.title ?? '' }
+}
+
+/**
+ * 批量取记录状态。缓存 10 分钟：状态变化要能很快看到，但不必每次刷新都问平台。
+ * 取不到就返回空标题 + `unknown`，界面不会因此空掉。
+ */
+async function handleRecords(ctx, request) {
   try {
     const body = await request.json()
     const requested = Array.isArray(body?.refs) ? body.refs.filter((ref) => typeof ref === 'string' && ref !== '') : []
     const credentials = loadDevopsCredentials()
-    const cache = await readJson(TITLES_PATH, {})
-    const entries = cache.refs !== null && typeof cache.refs === 'object' && cache.refs !== undefined ? cache.refs : {}
+    const cache = await readJson(RECORDS_PATH, {})
+    const entries = cache.records !== null && typeof cache.records === 'object' && cache.records !== undefined ? cache.records : {}
 
-    const titles = {}
-    let fetched = 0
+    const records = {}
     const now = Date.now()
+    let fetched = 0
     for (const ref of [...new Set(requested)]) {
       const hit = entries[ref]
-      if (hit !== undefined && typeof hit.at === 'number' && now - hit.at < TITLE_TTL_MS && typeof hit.title === 'string') {
-        titles[ref] = { title: hit.title, url: hit.url ?? urlOfRef(credentials.baseUrl, ref) }
+      const url = urlOfRef(credentials.baseUrl, ref)
+      if (hit !== undefined && typeof hit.at === 'number' && now - hit.at < RECORD_TTL_MS) {
+        records[ref] = { ...hit, url, at: undefined }
         continue
       }
       if (credentials.token === '') {
-        titles[ref] = { title: '', url: urlOfRef(credentials.baseUrl, ref) }
+        records[ref] = { title: '', version: null, state: 'unknown', stateLabel: STATE_LABEL.unknown, onlineAt: null, envs: [], url }
         continue
       }
-      let title = ''
+      let record
       try {
-        const resolved = await resolveDevopsTitle(ref, credentials)
-        title = typeof resolved?.title === 'string' ? resolved.title : ''
+        record = await fetchRecord(ref, credentials, credentials.baseUrl)
         fetched += 1
       } catch {
-        title = ''
+        record = { title: '', version: null, state: 'unknown', stateLabel: STATE_LABEL.unknown, onlineAt: null, envs: [] }
       }
-      const url = urlOfRef(credentials.baseUrl, ref)
-      entries[ref] = { title, url, at: now }
-      titles[ref] = { title, url }
+      entries[ref] = { ...record, at: now }
+      records[ref] = { ...record, url }
     }
 
-    if (fetched > 0) await writeJson(TITLES_PATH, { version: 1, refs: entries })
-    return json({ ok: true, titles, fetched, hasCredential: credentials.token !== '' })
+    if (fetched > 0) await writeJson(RECORDS_PATH, { version: 2, records: entries })
+    return json({ ok: true, records, fetched, hasCredential: credentials.token !== '' })
   } catch (error) {
-    ctx.logger?.warn?.(`workbench: titles route failed: ${error instanceof Error ? error.message : String(error)}`)
-    return json({ ok: false, error: 'titles route failed' }, 500)
+    ctx.logger?.warn?.(`workbench: records route failed: ${error instanceof Error ? error.message : String(error)}`)
+    return json({ ok: false, error: 'records route failed' }, 500)
   }
 }
 

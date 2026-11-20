@@ -22,7 +22,7 @@ window.__ModuleLoader__.load({
     const NOTES_ROUTE = '/api/workbench/notes'
     const CONFIG_ROUTE = '/api/workbench/config'
     const REFS_ROUTE = '/api/workbench/refs'
-    const TITLES_ROUTE = '/api/workbench/titles'
+    const RECORDS_ROUTE = '/api/workbench/records'
 
     /** 兜底：Host 扫不到正文时，退回从会话标题里认编号。 */
     const REF_PATTERN = /\b(RO-\d{8}-\d{3}(?:-S\d+)?|T-\d{8}-\d{3}|P-\d{8}-\d{3}|BUG-\d{8}-\d{3}|ON3-\d{4,})\b/
@@ -88,6 +88,12 @@ window.__ModuleLoader__.load({
       error: 'var(--dsw-alias-state-error-primary)',
       idle: 'var(--dsw-alias-state-idle-primary)',
     }
+
+    /** 平台记录缺失时的占位，避免卡片里到处判空。 */
+    const EMPTY_RECORD = { title: '', version: null, state: 'unknown', stateLabel: undefined, onlineAt: null, envs: [], url: null }
+
+    /** 平台状态的配色与文案。 */
+    const STATE_COLOR = { dev: C.idle, beta: C.warn, test: C.warn, uat: C.warn, online: C.success, unknown: C.label2 }
 
     const styles = {
       page: {
@@ -214,6 +220,15 @@ window.__ModuleLoader__.load({
       },
       members: { marginTop: 8, borderTop: `1px solid ${C.border1}`, paddingTop: 6 },
       dormantActions: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 },
+      stateChip: {
+        flex: 'none',
+        fontSize: 11,
+        lineHeight: '16px',
+        padding: '0 6px',
+        borderRadius: 999,
+        border: '1px solid transparent',
+      },
+      envRow: { display: 'inline-flex', gap: 3, alignItems: 'center', flex: 'none' },
       memberRow: {
         display: 'flex',
         gap: 8,
@@ -348,7 +363,7 @@ window.__ModuleLoader__.load({
     const SLEEP_DAYS_PLAIN = 7
 
     /** 周报草稿：本周收尾的任务写结论，进行中的写下一步。 */
-    function weeklyDraft(tasks) {
+    function weeklyDraft(tasks, records = {}) {
       const { start, end } = weekRange()
       const done = tasks.filter((task) => task.status === 'done' && task.doneAt >= start && task.doneAt < end)
       const open = tasks.filter((task) => task.status === 'open')
@@ -356,6 +371,18 @@ window.__ModuleLoader__.load({
       if (done.length === 0) lines.push('- （无）')
       for (const task of done) {
         lines.push(`- ${task.ref}（${task.sessions.length} 个会话）${task.outcome === '' ? '' : `：${task.outcome}`}`)
+      }
+      lines.push('', '## 本周上线（平台）')
+      const shipped = tasks
+        .map((task) => ({ task, record: records[task.ref] }))
+        .filter((item) => item.record !== undefined && typeof item.record.onlineAt === 'string')
+        .filter((item) => {
+          const at = Date.parse(item.record.onlineAt)
+          return Number.isFinite(at) && at >= start && at < end
+        })
+      if (shipped.length === 0) lines.push('- （无）')
+      for (const item of shipped) {
+        lines.push(`- ${item.task.ref}${item.record.title === '' ? '' : ` ${item.record.title}`}（${md(Date.parse(item.record.onlineAt))} 上线）`)
       }
       lines.push('', '## 进行中')
       if (open.length === 0) lines.push('- （无）')
@@ -430,17 +457,17 @@ window.__ModuleLoader__.load({
           return body
         }
 
-        /** 取每个单号在平台上的标题与链接；取不到就只有编号。 */
-        const loadTitles = async (refs) => {
+        /** 取每个单号在平台上的标题、状态、版本与链接；取不到就只有编号。 */
+        const loadRecords = async (refs) => {
           if (refs.length === 0) return {}
-          const response = await fetch(TITLES_ROUTE, {
+          const response = await fetch(RECORDS_ROUTE, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ refs }),
           })
           const body = await response.json()
-          if (body?.ok !== true) throw new Error(body?.error ?? '读取标题失败')
-          return body.titles ?? {}
+          if (body?.ok !== true) throw new Error(body?.error ?? '读取平台状态失败')
+          return body.records ?? {}
         }
 
         const saveNote = async (key, patch) => {
@@ -496,7 +523,7 @@ window.__ModuleLoader__.load({
         }
 
         /** 一个任务：单号 + 成员会话 + 结论/下一步。 */
-        function TaskCard({ task, title, url, onSave, onOpen }) {
+        function TaskCard({ task, record, onSave, onOpen }) {
           const [outcome, setOutcome] = useState(task.outcome)
           const [next, setNext] = useState(task.next)
           const [expanded, setExpanded] = useState(false)
@@ -521,14 +548,31 @@ window.__ModuleLoader__.load({
               h('span', { style: styles.ref }, task.ref),
               h('span', {
                 style: styles.cardTitle,
-                title: title === '' ? task.ref : title,
-              }, title === '' ? '（取不到标题）' : title),
-              url === null ? null : h('button', {
+                title: record.title === '' ? task.ref : record.title,
+              }, record.title === '' ? '（取不到标题）' : record.title),
+              record.stateLabel === undefined ? null : h('span', {
+                style: { ...styles.stateChip, color: STATE_COLOR[record.state] ?? C.label2, borderColor: STATE_COLOR[record.state] ?? C.border2 },
+                title: record.version === null ? '' : `随 ${record.version} 发布`,
+              }, record.stateLabel),
+              record.envs === undefined || record.envs.length === 0 ? null : h('span', { style: styles.envRow },
+                record.envs.map((env) => h('span', {
+                  key: env.env,
+                  title: `${env.label}：${env.done ? `已完成 ${env.completedAt === null ? '' : md(Date.parse(env.completedAt))}` : '未完成'}`,
+                  style: {
+                    width: 8,
+                    height: 8,
+                    borderRadius: 2,
+                    background: env.done ? C.success : C.border2,
+                  },
+                })),
+              ),
+              record.onlineAt === null ? null : h('span', { style: { fontSize: 11, color: C.success, flex: 'none' } }, `上线 ${md(Date.parse(record.onlineAt))}`),
+              record.url === null || record.url === undefined ? null : h('button', {
                 style: styles.iconButton,
                 title: '在浏览器里打开这个单',
                 onClick: () => {
                   try {
-                    window.open(url, '_blank', 'noopener')
+                    window.open(record.url, '_blank', 'noopener')
                   } catch (error) {
                     report('open-url', error)
                   }
@@ -563,6 +607,11 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setNext(event.target.value),
                 onBlur: (event) => commit('next', event.target.value),
               }),
+              record.state === 'online' && task.status === 'open' ? h('div', { style: styles.dormantActions },
+                h('span', { style: { fontSize: 11.5, color: C.success } },
+                  `平台已上线${record.onlineAt === null ? '' : ` ${md(Date.parse(record.onlineAt))}`}，待你确认收尾`),
+                h('button', { style: styles.button, onClick: () => onSave(task.key, { status: 'done' }) }, '确认收尾'),
+              ) : null,
               task.dormant === true ? h('div', { style: styles.dormantActions },
                 h('span', { style: { fontSize: 11.5, color: C.label2 } }, `${task.windowDays} 天没有新会话`),
                 h('button', { style: styles.button, onClick: () => onSave(task.key, { status: 'done' }) }, '确认收尾'),
@@ -638,7 +687,7 @@ window.__ModuleLoader__.load({
           const [loading, setLoading] = useState(true)
           const [error, setError] = useState(null)
           const [toast, setToast] = useState(null)
-          const [titles, setTitles] = useState({})
+          const [records, setRecords] = useState({})
           const [showAll, setShowAll] = useState(false)
           const [showUnlinked, setShowUnlinked] = useState(false)
           const [showOldDormant, setShowOldDormant] = useState(false)
@@ -676,10 +725,10 @@ window.__ModuleLoader__.load({
 
               const grouped = groupTasks(merged, loaded.notes)
               try {
-                const known = await loadTitles(grouped.tasks.map((task) => task.ref))
-                setTitles(known)
+                const known = await loadRecords(grouped.tasks.map((task) => task.ref))
+                setRecords(known)
               } catch (reason) {
-                report('titles', reason)
+                report('records', reason)
               }
               setNotes(loaded.notes)
               setSessions(merged)
@@ -770,7 +819,7 @@ window.__ModuleLoader__.load({
                   h('button', {
                     style: styles.primary,
                     onClick: () => {
-                      navigator.clipboard?.writeText(weeklyDraft(tasks))
+                      navigator.clipboard?.writeText(weeklyDraft(tasks, records))
                       setToast('周报草稿已复制')
                     },
                   }, '复制周报草稿'),
@@ -790,6 +839,12 @@ window.__ModuleLoader__.load({
                   h('span', { style: styles.metricLabel }, '休眠'),
                 ),
                 h('div', { style: styles.metric },
+                  h('span', {
+                    style: { ...styles.metricValue, color: tasks.filter((task) => task.status === 'open' && records[task.ref]?.state === 'online').length === 0 ? C.label1 : C.success },
+                  }, String(tasks.filter((task) => task.status === 'open' && records[task.ref]?.state === 'online').length)),
+                  h('span', { style: styles.metricLabel }, '平台已上线待确认'),
+                ),
+                h('div', { style: styles.metric },
                   h('span', { style: styles.metricValue, color: unlinked.length === 0 ? C.label1 : C.label2 }, String(unlinked.length)),
                   h('span', { style: styles.metricLabel }, '未挂单的会话'),
                 ),
@@ -800,7 +855,7 @@ window.__ModuleLoader__.load({
               ),
               error === null ? null : h('div', { style: { ...styles.empty, color: C.error } }, `读取失败：${error}`),
               section('进行中的任务', visibleOpen,
-                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }),
+                (task) => h(TaskCard, { key: task.key, task, record: records[task.ref] ?? EMPTY_RECORD, onSave, onOpen }),
                 '没有进行中的任务。',
                 hiddenOpen <= 0 ? null : h('button', {
                   style: { ...styles.button, marginTop: 2 },
@@ -808,7 +863,7 @@ window.__ModuleLoader__.load({
                 }, `还有 ${hiddenOpen} 个更早的任务，展开`),
               ),
               dormantTasks.length === 0 ? null : section('休眠（没有新会话）', recentDormant,
-                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }),
+                (task) => h(TaskCard, { key: task.key, task, record: records[task.ref] ?? EMPTY_RECORD, onSave, onOpen }),
                 '没有休眠的任务。',
                 oldDormant.length === 0 ? null : h('button', {
                   style: { ...styles.button, marginTop: 2 },
@@ -817,14 +872,14 @@ window.__ModuleLoader__.load({
               ),
               dormantTasks.length === 0 || !showOldDormant ? null : h('div', null,
                 oldDormant.map((task) => h(TaskCard, {
-                  key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen,
+                  key: task.key, task, record: records[task.ref] ?? EMPTY_RECORD, onSave, onOpen,
                 })),
               ),
               section(`本周收尾（${md(start)} ~ ${md(end - 1)}）`, doneThisWeek,
-                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }),
+                (task) => h(TaskCard, { key: task.key, task, record: records[task.ref] ?? EMPTY_RECORD, onSave, onOpen }),
                 '本周还没有写结论的任务。'),
               doneBefore.length === 0 ? null : section('更早收尾', doneBefore.slice(0, 20),
-                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }), ''),
+                (task) => h(TaskCard, { key: task.key, task, record: records[task.ref] ?? EMPTY_RECORD, onSave, onOpen }), ''),
               section('未挂单的会话', showUnlinked ? unlinked : [],
                 (session) => h(UnlinkedCard, { key: session.key, session, onSave, onOpen }),
                 showUnlinked ? '没有未挂单的会话。' : '',
