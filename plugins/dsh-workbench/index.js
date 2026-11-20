@@ -100,9 +100,18 @@ async function readJson(path, fallback) {
   }
 }
 
-/** 原子写：先写临时文件再 rename。 */
+/** 原子写：先写临时文件再 rename。存盘前把上一版留成 .bak，出事能回退。 */
 async function writeJson(path, value) {
   await mkdir(DIR, { recursive: true })
+  try {
+    const previous = await readFile(path, 'utf8')
+    if (previous.trim() !== '') {
+      // 只留最近一版：足够救回“刚被写坏”的那次。
+      await writeFile(`${path}.bak`, previous, 'utf8')
+    }
+  } catch {
+    // 还没有旧文件，没有可备份的东西。
+  }
   const tmp = `${path}.${process.pid}.tmp`
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
   await rename(tmp, path)
