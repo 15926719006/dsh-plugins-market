@@ -1,0 +1,7 @@
+# Bundle patch: one Host row that predicts the next prompt after every turn and
+# serves it to the browser half over a small HTTP surface. The browser half is
+# declared through package.json's dsh.client section and draws nothing until it
+# has a suggestion.
+- insert:
+    - id: autocomplete
+      name: '@local/dsh-autocomplete'

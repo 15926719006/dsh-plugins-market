@@ -262,6 +262,31 @@
       "sortKeys": {
         "recommended": 10
       }
+    },
+    "dsh-autocomplete": {
+      "title": {
+        "zh": "自动补全",
+        "en": "Autocomplete"
+      },
+      "description": {
+        "zh": "每轮任务结束后，在输入框里浮出一句你下一句可能想说的话（灰字，和 placeholder 同样式）；桌面按 Tab、手机点「填入」，一键变成可编辑草稿，不会自动发送。任务进行中、输入框有草稿时都不会打扰你。",
+        "en": "After every turn, one predicted next sentence appears as ghost text inside the message box. Tab on desktop, tap 填入 on touch, and it becomes an editable draft — it never sends. Nothing shows while a turn runs or while you are typing."
+      },
+      "category": "ui",
+      "keywords": [
+        "composer",
+        "autocomplete",
+        "suggestion",
+        "tab",
+        "ghost-text",
+        "prediction"
+      ],
+      "sortKeys": {
+        "recommended": 95
+      },
+      "labels": [
+        "productivity"
+      ]
     }
   }
 }

@@ -23,6 +23,7 @@ https://15926719006.github.io/dsh-plugins-market/index.json
 | 任务花费（Task Cost） | 按 **DeepSeek 计费标准**（高峰/空闲、缓存命中/未命中分别计价）估算当前会话的模型调用花费：输入框下方显示会话累计，每条回复底部显示本轮金额 |
 | 单轮耗时（Turn Duration） | 在每条助手回复底部显示这一轮从开始到结束用了多久（含模型思考与工具调用），悬停可看起止时间；历史会话同样生效 |
 | 总结重命名（Summarize & Rename） | 在会话行悬停时点一下，用模型把整段对话概括成一行标题并直接重命名；可在插件页开启「devops 编号前缀」，让标题带上需求编号与平台标题 |
+| 自动补全（Autocomplete） | 每轮任务结束后，在**输入框里**浮出一句你下一句可能想说的话（和 placeholder 同样式的灰字）；桌面按 `Tab`、手机点「填入」就变成可编辑草稿，不发送；任务进行中或你在打字时不打扰 |
 
 每个插件的详情页都会展示它自己的 README，开头是真实运行界面截图（`docs/*.png`），点开条目就能先看到效果再决定装不装。
 
@@ -69,7 +70,8 @@ dsh-plugins-market/
 │   ├── dsh-opencode-quota/
 │   ├── dsh-cost-stat/
 │   ├── dsh-turn-duration/
-│   └── dsh-session-rename/
+│   ├── dsh-session-rename/
+│   └── dsh-autocomplete/
 ├── plugins.json                          # 索引的展示元数据：标题/描述/分类/关键词等
 ├── scripts/
 │   ├── build-index.mjs                   # 生成 site/index.json（无第三方依赖）

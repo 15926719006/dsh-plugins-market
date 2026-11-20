@@ -1,0 +1,33 @@
+{
+  "name": "@local/dsh-autocomplete",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Composer autocomplete: one predicted next sentence, drawn as ghost text inside the message box and accepted with Tab on desktop or a tap on touch.",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "docs/*.png"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}
