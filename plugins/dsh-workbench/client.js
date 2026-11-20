@@ -733,6 +733,7 @@ window.__ModuleLoader__.load({
                   },
                 }),
                 h('span', { style: { flex: 'none' } }, '失焦即存'),
+                h('span', { style: { flex: 'none' } }, '· 归类规则：每个会话只认一个单号'),
               ),
               toast === null ? null : h('div', { style: styles.toast }, toast),
             ),
