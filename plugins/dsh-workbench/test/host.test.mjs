@@ -11,7 +11,7 @@ import test from 'node:test'
 const HOME = mkdtempSync(join(tmpdir(), 'workbench-test-'))
 process.env.HOME = HOME
 
-const { apply } = await import('../host.js')
+const { apply } = await import('../index.js')
 
 /** 造一个只够用的 Host ctx；`sessionQuery` 可选。 */
 function createCtx(sessionQuery) {

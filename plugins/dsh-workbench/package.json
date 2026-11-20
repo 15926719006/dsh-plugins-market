@@ -6,13 +6,13 @@
   "description": "把会话变成可回溯的工作记录：给每个会话挂结论、下一步与单号，一屏看到进行中、未收尾和本周收尾，并能一键生成周报草稿。",
   "license": "MIT",
   "exports": {
-    ".": "./host.js",
+    ".": "./index.js",
     "./client": "./client.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg"
   },
   "files": [
-    "./host.js",
+    "index.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
