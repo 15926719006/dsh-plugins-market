@@ -213,6 +213,7 @@ window.__ModuleLoader__.load({
         outline: 'none',
       },
       members: { marginTop: 8, borderTop: `1px solid ${C.border1}`, paddingTop: 6 },
+      dormantActions: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 },
       memberRow: {
         display: 'flex',
         gap: 8,
@@ -275,7 +276,7 @@ window.__ModuleLoader__.load({
      * 任务主键是单号：`devops:<ref>`。同一个单号出现在几个会话里，就只有一个任务，
      * 成员是这些会话。没有单号的会话不算任务，单独列出来。
      */
-    function groupTasks(sessions, notes) {
+    function groupTasks(sessions, notes, now = Date.now()) {
       const byRef = new Map()
       for (const session of sessions) {
         for (const ref of session.refs) {
@@ -297,12 +298,22 @@ window.__ModuleLoader__.load({
         const status = typeof note.status === 'string' && note.status !== ''
           ? note.status
           : outcome !== '' ? 'done' : 'open'
+        const next = typeof note.next === 'string' ? note.next.trim() : ''
+        // 活动时间取「最近一次会话」和「你点过重新关注」里更晚的那个。
+        const reviveAt = typeof note.reviveAt === 'number' ? note.reviveAt : 0
+        const activityAt = Math.max(latest.updatedAt, reviveAt)
+        const windowDays = next === '' ? SLEEP_DAYS_PLAIN : SLEEP_DAYS_WITH_NEXT
+        const ageDays = (now - activityAt) / 86400000
         tasks.push({
           ...task,
           updatedAt: latest.updatedAt,
+          activityAt,
+          ageDays,
+          windowDays,
+          dormant: status === 'open' && ageDays > windowDays,
           running: task.sessions.some((session) => session.running),
           outcome,
-          next: typeof note.next === 'string' ? note.next : '',
+          next,
           status,
           doneAt: typeof note.updatedAt === 'number' ? note.updatedAt : 0,
         })
@@ -331,6 +342,10 @@ window.__ModuleLoader__.load({
 
       return { tasks, unlinked }
     }
+
+    /** 休眠窗口（天）：写了下一步 = 在等外部（21 天），没写 = 只是不动了（7 天）。 */
+    const SLEEP_DAYS_WITH_NEXT = 21
+    const SLEEP_DAYS_PLAIN = 7
 
     /** 周报草稿：本周收尾的任务写结论，进行中的写下一步。 */
     function weeklyDraft(tasks) {
@@ -522,7 +537,9 @@ window.__ModuleLoader__.load({
               h('span', { style: styles.spacer }),
               h('span', { style: styles.headMeta },
                 h('span', null, `${task.sessions.length} 个会话`),
-                h('span', null, `最近 ${md(task.updatedAt)}`),
+                task.dormant === true
+                  ? h('span', null, `最后活动 ${Math.floor(task.ageDays)} 天前`)
+                  : h('span', null, `最近 ${md(task.updatedAt)}`),
                 task.running ? h('span', { style: { color: C.success } }, '运行中') : null,
               ),
               h('span', { style: { ...styles.statusChip, color: statusColor } }, statusText),
@@ -546,6 +563,12 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setNext(event.target.value),
                 onBlur: (event) => commit('next', event.target.value),
               }),
+              task.dormant === true ? h('div', { style: styles.dormantActions },
+                h('span', { style: { fontSize: 11.5, color: C.label2 } }, `${task.windowDays} 天没有新会话`),
+                h('button', { style: styles.button, onClick: () => onSave(task.key, { status: 'done' }) }, '确认收尾'),
+                h('button', { style: styles.button, onClick: () => onSave(task.key, { status: 'dropped' }) }, '标记放弃'),
+                h('button', { style: styles.button, onClick: () => onSave(task.key, { reviveAt: Date.now() }) }, '重新关注'),
+              ) : null,
               h('div', { style: styles.members },
                 h('button', { style: styles.toggle, onClick: () => setExpanded((value) => !value) },
                   `${expanded ? '▾' : '▸'} ${task.sessions.length} 个会话`),
@@ -618,6 +641,7 @@ window.__ModuleLoader__.load({
           const [titles, setTitles] = useState({})
           const [showAll, setShowAll] = useState(false)
           const [showUnlinked, setShowUnlinked] = useState(false)
+          const [showOldDormant, setShowOldDormant] = useState(false)
 
           const refresh = useCallback(async () => {
             setLoading(true)
@@ -720,7 +744,10 @@ window.__ModuleLoader__.load({
           }, [])
 
           const { start, end } = weekRange()
-          const openTasks = tasks.filter((task) => task.status === 'open')
+          const openTasks = tasks.filter((task) => task.status === 'open' && task.dormant !== true)
+          const dormantTasks = tasks.filter((task) => task.status === 'open' && task.dormant === true)
+          const recentDormant = dormantTasks.filter((task) => task.ageDays <= 30)
+          const oldDormant = dormantTasks.filter((task) => task.ageDays > 30)
           const doneThisWeek = tasks.filter((task) => task.status === 'done' && task.doneAt >= start && task.doneAt < end)
           const doneBefore = tasks.filter((task) => task.status === 'done' && (task.doneAt < start || task.doneAt === 0))
           const visibleOpen = showAll ? openTasks : openTasks.slice(0, 30)
@@ -759,8 +786,8 @@ window.__ModuleLoader__.load({
                   h('span', { style: styles.metricLabel }, '本周收尾'),
                 ),
                 h('div', { style: styles.metric },
-                  h('span', { style: styles.metricValue }, String(scan === null ? 0 : scan.sessions)),
-                  h('span', { style: styles.metricLabel }, '工作目录内会话'),
+                  h('span', { style: { ...styles.metricValue, color: dormantTasks.length === 0 ? C.label1 : C.label2 } }, String(dormantTasks.length)),
+                  h('span', { style: styles.metricLabel }, '休眠'),
                 ),
                 h('div', { style: styles.metric },
                   h('span', { style: styles.metricValue, color: unlinked.length === 0 ? C.label1 : C.label2 }, String(unlinked.length)),
@@ -779,6 +806,19 @@ window.__ModuleLoader__.load({
                   style: { ...styles.button, marginTop: 2 },
                   onClick: () => setShowAll(true),
                 }, `还有 ${hiddenOpen} 个更早的任务，展开`),
+              ),
+              dormantTasks.length === 0 ? null : section('休眠（没有新会话）', recentDormant,
+                (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }),
+                '没有休眠的任务。',
+                oldDormant.length === 0 ? null : h('button', {
+                  style: { ...styles.button, marginTop: 2 },
+                  onClick: () => setShowOldDormant((value) => !value),
+                }, showOldDormant ? '收起' : `还有 ${oldDormant.length} 个 30 天没动的任务`),
+              ),
+              dormantTasks.length === 0 || !showOldDormant ? null : h('div', null,
+                oldDormant.map((task) => h(TaskCard, {
+                  key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen,
+                })),
               ),
               section(`本周收尾（${md(start)} ~ ${md(end - 1)}）`, doneThisWeek,
                 (task) => h(TaskCard, { key: task.key, task, title: titles[task.ref]?.title ?? '', url: titles[task.ref]?.url ?? null, onSave, onOpen }),

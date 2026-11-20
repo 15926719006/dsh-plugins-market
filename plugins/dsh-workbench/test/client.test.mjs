@@ -223,3 +223,47 @@ test('单号识别与周窗口', async () => {
   assert.equal(startDate.getHours(), 0)
   assert.equal(end - start, 7 * 24 * 60 * 60 * 1000)
 })
+
+test('休眠：没有下一步 7 天、写了下一步 21 天', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const now = 1000 * 60 * 60 * 24 * 100
+  const day = 86400000
+  const mk = (id, ago) => session(id, ['RO-20260923-028'], now - ago * day)
+
+  const plain = api.groupTasks([mk('a', 8)], {}, now)
+  assert.equal(plain.tasks[0].dormant, true, '没写下一步，8 天算休眠')
+  assert.equal(plain.tasks[0].windowDays, 7)
+
+  const waiting = api.groupTasks([mk('b', 8)], { 'devops:RO-20260923-028': { next: '等发布窗口' } }, now)
+  assert.equal(waiting.tasks[0].dormant, false, '写了下一步，8 天还不算休眠')
+  assert.equal(waiting.tasks[0].windowDays, 21)
+
+  const waitingLong = api.groupTasks([mk('c', 25)], { 'devops:RO-20260923-028': { next: '等发布窗口' } }, now)
+  assert.equal(waitingLong.tasks[0].dormant, true, '写了下一步，25 天算休眠')
+})
+
+test('重新关注（reviveAt）把休眠任务拉回活跃', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const now = 1000 * 60 * 60 * 24 * 100
+  const day = 86400000
+  const { tasks } = api.groupTasks([session('a', ['RO-20260923-028'], now - 30 * day)], {
+    'devops:RO-20260923-028': { reviveAt: now - 1000 },
+  }, now)
+  assert.equal(tasks[0].dormant, false)
+})
+
+test('收尾的任务不算休眠', async () => {
+  const mod = await loadModule()
+  const { ctx } = createCtx()
+  const api = mod.apply(ctx)
+  const now = 1000 * 60 * 60 * 24 * 100
+  const day = 86400000
+  const { tasks } = api.groupTasks([session('a', ['RO-20260923-028'], now - 30 * day)], {
+    'devops:RO-20260923-028': { status: 'done', outcome: '已上线' },
+  }, now)
+  assert.equal(tasks[0].dormant, false)
+})

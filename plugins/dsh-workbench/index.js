@@ -44,7 +44,7 @@ const LOG_ROUTE = '/api/workbench/log'
 const LOG_PATH = join(DIR, 'client.log')
 
 /** 旁注里允许写入的字段，其余一律丢弃。 */
-const NOTE_FIELDS = ['outcome', 'next', 'status', 'impact', 'note', 'refs']
+const NOTE_FIELDS = ['outcome', 'next', 'status', 'impact', 'note', 'refs', 'reviveAt']
 /** 状态取值。 */
 const STATUSES = ['open', 'done', 'dropped']
 
@@ -145,6 +145,10 @@ function cleanPatch(input) {
           ref: ref.ref,
           url: typeof ref.url === 'string' ? ref.url : null,
         }))
+      continue
+    }
+    if (field === 'reviveAt') {
+      if (typeof value === 'number' && Number.isFinite(value)) patch.reviveAt = value
       continue
     }
     if (field === 'status') {
