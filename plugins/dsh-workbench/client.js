@@ -344,6 +344,7 @@ window.__ModuleLoader__.load({
 
         /** 会话快照里属于工作目录的那些会话。 */
         const readSessions = (root) => {
+          if (typeof root !== 'string' || root === '') return []
           const sessions = service('sessions')
           if (sessions?.list?.getSnapshot === undefined) return []
           const byId = sessions.list.getSnapshot().byId ?? {}
@@ -589,7 +590,10 @@ window.__ModuleLoader__.load({
 
               const merged = sessions.map((session) => {
                 const found = Array.isArray(refsMap[session.id]) ? refsMap[session.id] : []
-                const refs = found.length > 0 ? found : session.titleRef === null ? [] : [session.titleRef]
+                // 只认一个单号：即使 Host 是旧版把所有编号都返回来，也不让它扩散。
+                const refs = found.length > 0
+                  ? [found[0]]
+                  : session.titleRef === null ? [] : [session.titleRef]
                 return { ...session, refs }
               })
 
