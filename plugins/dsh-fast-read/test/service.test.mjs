@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -112,4 +112,30 @@ test('state returns the protocol when asked', async () => {
   const state = await service.state(root, undefined, 'protocol')
   assert.match(state.protocol, /抽取协议/)
   assert.equal(state.books.length, 0)
+})
+
+test('two record calls for one book run one after the other', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'fast-read-'))
+  const { bookId } = await service.importBook(root, { text: sample(), title: '并发书' })
+  const quote = (await service.readChapter(root, bookId, 1, 0, 4000)).text.split('\n')[1]
+  const [first, second] = await Promise.all([
+    service.record(root, bookId, 'nodes', [{ name: '并发甲', type: 'concept', summary: '甲', weight: 3, evidence: [{ chapter: 1, quote }] }]),
+    service.record(root, bookId, 'nodes', [{ name: '并发乙', type: 'concept', summary: '乙', weight: 3, evidence: [{ chapter: 1, quote }] }]),
+  ])
+  assert.equal(first.accepted, 1)
+  assert.equal(second.accepted, 1)
+  const graph = JSON.parse(readFileSync(bookPaths(root, bookId).graph, 'utf8'))
+  assert.equal(graph.nodes.length, 2)
+})
+
+test('an invalid mind map is refused and never written', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'fast-read-'))
+  const { bookId } = await service.importBook(root, { text: sample(), title: '脑图书' })
+  const result = await service.record(root, bookId, 'mindmap', {
+    root: { name: '全书', children: [{ name: '不存在的节点', nodeId: 'n-deadbeef' }] },
+  })
+  assert.equal(result.accepted, 0)
+  assert.equal(result.issues[0].code, 'unknown-node')
+  assert.equal(result.progress.mindmap, false)
+  assert.equal(existsSync(bookPaths(root, bookId).mindmap), false)
 })

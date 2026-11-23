@@ -179,22 +179,23 @@ const CSS = `
 .fr-md hr{border:0;border-top:.5px solid var(--dsw-alias-border-l2,#e0e0e0);margin:16px 0}
 .fr-tree{list-style:none;margin:0;padding:0}
 .fr-tree li{margin:2px 0}
-.fr-tnode{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:6px;cursor:pointer;line-height:1.5}
+.fr-tnode{display:flex;align-items:center;gap:6px;width:100%;padding:3px 6px;border:0;background:transparent;border-radius:6px;cursor:pointer;line-height:1.5;font:inherit;color:inherit;text-align:left}
 .fr-tnode:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.1))}
 .fr-tnode.selected{background:rgba(76,141,255,.14);color:#2f6fd0}
 .fr-chevron{width:12px;display:inline-flex;justify-content:center;color:var(--dsw-alias-label-tertiary,#999);font-size:10px}
 .fr-dot{width:7px;height:7px;border-radius:50%;flex:none}
 .fr-muted{color:var(--dsw-alias-label-secondary,#888);font-size:12px}
-.fr-graphwrap{position:relative;flex:none;height:min(58vh,560px);overflow:hidden}
+.fr-graphwrap{position:relative;flex:1;min-height:180px;max-height:min(58vh,560px);overflow:hidden}
 .fr-svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 .fr-svg.dragging{cursor:grabbing}
-.fr-node{cursor:pointer}
+.fr-node{cursor:pointer;outline:none}
+.fr-node:focus-visible circle:first-of-type{stroke:#4c8dff;stroke-width:2}
 .fr-node text{font-size:10.5px;fill:var(--dsw-alias-label-primary,#333);pointer-events:auto}
 .fr-node.dim{opacity:.18}
 .fr-edge{stroke-width:1;opacity:.55}
 .fr-edge.dim{opacity:.08}
 .fr-hint{position:absolute;left:10px;bottom:10px;padding:4px 9px;border-radius:99px;background:var(--dsw-alias-bg-layer-1,rgba(255,255,255,.9));border:.5px solid var(--dsw-alias-border-l2,#ddd);font-size:11.5px;color:var(--dsw-alias-label-secondary,#777);cursor:pointer}
-.fr-drawer{flex:none;max-height:46%;overflow:auto;border-top:.5px solid var(--dsw-alias-border-l2,#e0e0e0);background:var(--dsw-alias-bg-layer-1,transparent);padding:10px 13px 14px}
+.fr-drawer{flex:none;max-height:min(46%,380px);overflow:auto;border-top:.5px solid var(--dsw-alias-border-l2,#e0e0e0);background:var(--dsw-alias-bg-layer-1,transparent);padding:10px 13px 14px}
 .fr-drawer-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .fr-drawer-title{font-size:14px;font-weight:600}
 .fr-badge{font-size:10.5px;padding:1px 7px;border-radius:99px;border:.5px solid var(--dsw-alias-border-l2,#ddd);color:var(--dsw-alias-label-secondary,#777)}
@@ -226,80 +227,124 @@ function parseJson(text, fallback) {
   }
 }
 
-/** Library data for one session, refreshed on a timer so extraction shows up live. */
-function useLibrary(ctx, sessionId, t) {
-  const [index, setIndex] = useState(null)
+/** Normalise a graph read from disk: hand-edited or older files must not blank the tab. */
+function normalizeGraph(value) {
+  const rawNodes = Array.isArray(value?.nodes) ? value.nodes : []
+  const nodes = rawNodes
+    .filter((node) => node !== null && typeof node === "object" && typeof node.id === "string" && typeof node.name === "string")
+    .map((node) => ({
+      ...node,
+      weight: Number.isFinite(Number(node.weight)) ? Number(node.weight) : 3,
+      chapter: Number.isFinite(Number(node.chapter)) ? Number(node.chapter) : 0,
+      summary: typeof node.summary === "string" ? node.summary : "",
+      evidence: (Array.isArray(node.evidence) ? node.evidence : [])
+        .filter((item) => item !== null && typeof item === "object" && typeof item.quote === "string")
+        .map((item) => ({
+          chapter: Number.isFinite(Number(item.chapter)) ? Number(item.chapter) : 0,
+          quote: item.quote,
+          offset: Number.isFinite(Number(item.offset)) ? Number(item.offset) : 0,
+          line: Number.isFinite(Number(item.line)) ? Number(item.line) : undefined,
+        })),
+    }))
+  const ids = new Set(nodes.map((node) => node.id))
+  const edges = (Array.isArray(value?.edges) ? value.edges : [])
+    .filter((edge) => edge !== null && typeof edge === "object"
+      && ids.has(edge.source) && ids.has(edge.target) && typeof edge.type === "string")
+  return { nodes, edges }
+}
+
+/**
+ * Read the library for one session and keep it current.
+ *
+ * Two rules keep this cheap and honest: a poll whose four files did not change
+ * does not touch state (so the graph never re-lays itself out on a timer), and
+ * only the newest request may write (so switching books cannot land the old
+ * book's data under the new title).
+ */
+function useLibrary(ctx, sessionId) {
+  const [books, setBooks] = useState([])
   const [book, setBook] = useState(null)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
   const [gen, setGen] = useState(0)
+  const [wantedId, setWantedId] = useState(null)
+  const lastFingerprint = useRef("")
+  const requestSeq = useRef(0)
 
   const refresh = useCallback(() => setGen((value) => value + 1), [])
 
   useEffect(() => {
-    let alive = true
-    const load = async () => {
-      if (!sessionId) return
-      try {
-        const text = await readWorkspaceFile(ctx, sessionId, `${LIBRARY}/index.json`)
-        if (!alive) return
-        const parsed = parseJson(text, null)
-        const books = Array.isArray(parsed?.books) ? parsed.books : []
-        setIndex(books)
-        setError("")
-        if (books.length > 0) {
-          const pick = bookRef.current && books.some((item) => item.bookId === bookRef.current) ? bookRef.current : books[0].bookId
-          await loadBook(pick, alive)
-        } else {
-          setBook(null)
-        }
-      } catch (failure) {
-        if (alive) setError(failure instanceof Error ? failure.message : String(failure))
-      } finally {
-        if (alive) setLoading(false)
-      }
+    if (!sessionId) {
+      setLoading(false)
+      return undefined
     }
-    const loadBook = async (bookId, aliveRef) => {
+    let cancelled = false
+    const seq = ++requestSeq.current
+    const current = () => !cancelled && seq === requestSeq.current
+
+    const load = async () => {
+      const indexText = await readWorkspaceFile(ctx, sessionId, `${LIBRARY}/index.json`)
+      if (!current()) return
+      const parsed = parseJson(indexText, null)
+      const list = (Array.isArray(parsed?.books) ? parsed.books : [])
+        .filter((item) => item !== null && typeof item === "object" && typeof item.bookId === "string")
+      setBooks(list)
+      if (list.length === 0) {
+        lastFingerprint.current = ""
+        setBook(null)
+        setLoading(false)
+        return
+      }
+      const pick = wantedId !== null && list.some((item) => item.bookId === wantedId) ? wantedId : list[0].bookId
       const [metaText, graphText, guideText, mindmapText] = await Promise.all([
-        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${bookId}/meta.json`),
-        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${bookId}/graph.json`),
-        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${bookId}/guide.md`),
-        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${bookId}/mindmap.json`),
+        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${pick}/meta.json`),
+        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${pick}/graph.json`),
+        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${pick}/guide.md`),
+        readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${pick}/mindmap.json`),
       ])
-      if (!aliveRef) return
+      if (!current()) return
+      const meta = parseJson(metaText, null)
+      const fingerprint = [
+        pick,
+        meta?.progress?.updatedAt ?? "",
+        metaText?.length ?? 0,
+        graphText?.length ?? 0,
+        guideText?.length ?? 0,
+        mindmapText?.length ?? 0,
+      ].join("|")
+      setLoading(false)
+      if (fingerprint === lastFingerprint.current) return
+      lastFingerprint.current = fingerprint
+      setError("")
       setBook({
-        bookId,
-        meta: parseJson(metaText, null),
-        graph: parseJson(graphText, { nodes: [], edges: [] }),
+        bookId: pick,
+        meta,
+        graph: normalizeGraph(parseJson(graphText, null)),
         guide: guideText ?? "",
         mindmap: parseJson(mindmapText, null),
       })
     }
-    bookLoadRef.current = loadBook
-    load()
+
+    load().catch((failure) => {
+      if (!current()) return
+      setLoading(false)
+      setError(failure instanceof Error ? failure.message : String(failure))
+    })
     const timer = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return
-      load()
+      load().catch(() => {})
     }, 2500)
     return () => {
-      alive = false
+      cancelled = true
       clearInterval(timer)
     }
-  }, [ctx, sessionId, gen])
-
-  const bookRef = useRef(null)
-  const bookLoadRef = useRef(null)
-  const selectedId = book?.bookId ?? null
-  useEffect(() => {
-    bookRef.current = selectedId
-  }, [selectedId])
+  }, [ctx, sessionId, gen, wantedId])
 
   const select = useCallback((bookId) => {
-    bookRef.current = bookId
-    if (bookLoadRef.current) bookLoadRef.current(bookId, true)
+    setWantedId(bookId)
   }, [])
 
-  return { books: index ?? [], book, loading, error, refresh, select, t }
+  return { books, book, loading, error, refresh, select }
 }
 
 /** Small markdown renderer: headings, lists, quotes, code, bold and links. */
@@ -412,10 +457,12 @@ function MindmapNode({ node, depth, selectedId, onSelect, collapsed, toggle }) {
   const open = collapsed[keyOf(node, depth)] !== true
   const nodeLink = typeof node.nodeId === "string" ? node.nodeId : null
   return e("li", null, [
-    e("div", {
+    e("button", {
       key: "row",
+      type: "button",
       className: nodeLink !== null && nodeLink === selectedId ? "fr-tnode selected" : "fr-tnode",
       style: { paddingLeft: `${depth * 14}px` },
+      "aria-expanded": hasChildren ? open : undefined,
       onClick: () => {
         if (hasChildren) toggle(keyOf(node, depth))
         if (nodeLink !== null) onSelect(nodeLink)
@@ -570,6 +617,7 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
   const [view, setView] = useState({ k: 1, x: 0, y: 0 })
   const [dragging, setDragging] = useState(false)
   const drag = useRef(null)
+  const svgRef = useRef(null)
 
   const neighbours = useMemo(() => {
     const focus = hover ?? selectedId
@@ -584,11 +632,17 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
 
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
 
-  const onWheel = (event) => {
-    event.preventDefault()
-    const scale = Math.min(3, Math.max(0.35, view.k * (event.deltaY > 0 ? 0.9 : 1.1)))
-    setView((current) => ({ ...current, k: scale }))
-  }
+  useEffect(() => {
+    const node = svgRef.current
+    if (node === null) return undefined
+    const onWheel = (event) => {
+      event.preventDefault()
+      const factor = event.deltaY > 0 ? 0.9 : 1.1
+      setView((current) => ({ ...current, k: Math.min(3, Math.max(0.35, current.k * factor)) }))
+    }
+    node.addEventListener("wheel", onWheel, { passive: false })
+    return () => node.removeEventListener("wheel", onWheel)
+  }, [])
   const onPointerDown = (event) => {
     if (event.target.closest && event.target.closest(".fr-node")) return
     drag.current = { x: event.clientX, y: event.clientY, ox: view.x, oy: view.y }
@@ -610,10 +664,10 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
   return e("div", { className: "fr-graphwrap" }, [
     e("svg", {
       key: "svg",
+      ref: svgRef,
       className: dragging ? "fr-svg dragging" : "fr-svg",
       viewBox: `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`,
       preserveAspectRatio: "xMidYMid meet",
-      onWheel,
       onPointerDown,
       onPointerMove,
       onPointerUp,
@@ -644,10 +698,21 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
             key: node.id,
             className: dim ? "fr-node dim" : "fr-node",
             transform: `translate(${point.x} ${point.y})`,
+            tabIndex: 0,
+            role: "button",
+            "aria-label": node.name,
+            "aria-pressed": selected,
             onMouseEnter: () => setHover(node.id),
             onMouseLeave: () => setHover(null),
+            onFocus: () => setHover(node.id),
+            onBlur: () => setHover(null),
             onClick: (event) => {
               event.stopPropagation()
+              onSelect(node.id)
+            },
+            onKeyDown: (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
               onSelect(node.id)
             },
           }, [
@@ -801,11 +866,17 @@ function EmptyState({ t }) {
 function FastReadBody(props) {
   const { ctx, t } = props
   const sessionId = props.sessionId ?? props.tab?.sessionId
-  const { books, book, loading, error, refresh, select } = useLibrary(ctx, sessionId, t)
+  const { books, book, loading, error, refresh, select } = useLibrary(ctx, sessionId)
   const [view, setView] = useState("guide")
   const [selected, setSelected] = useState(null)
   const [collapsed, setCollapsed] = useState({})
   const [showAll, setShowAll] = useState(false)
+  const bookKey = book?.bookId ?? null
+  useEffect(() => {
+    setSelected(null)
+    setCollapsed({})
+    setShowAll(false)
+  }, [bookKey])
 
   const meta = book?.meta ?? null
   const graph = book?.graph ?? { nodes: [], edges: [] }
@@ -819,7 +890,7 @@ function FastReadBody(props) {
     try {
       const rel = `${LIBRARY}/${book.bookId}/chapters/${String(chapter).padStart(4, "0")}.txt`
       const address = `dsh-resource://file/session/${encodeURIComponent(sessionId)}/${rel.split("/").map(encodeURIComponent).join("/")}`
-      ctx.sidebarRight.openResource(address, line === undefined ? undefined : { params: { line } })
+      ctx.sidebarRight.openResource(address, line == null ? undefined : { params: { line } })
     } catch (failure) {
       console.warn("[fast-read] jump failed", failure)
     }
@@ -876,13 +947,10 @@ function FastReadBody(props) {
     }, t("action.fullscreen")),
   ])
 
-  if (loading) return e("div", { className: "fr-root" }, [head, e("div", { key: "b", className: "fr-empty" }, t("loading"))])
-  if (error) {
-    return e("div", { className: "fr-root" }, [head, e("div", { key: "b", className: "fr-empty" }, t("error.load", { message: error }))])
-  }
-  if (books.length === 0 || meta === null) {
-    return e("div", { className: "fr-root" }, [head, e("div", { key: "b", className: "fr-body" }, e(EmptyState, { t }))])
-  }
+  const shell = (content) => e("div", { className: "fr-root" }, [e("style", { key: "css" }, CSS), head, content])
+  if (loading) return shell(e("div", { key: "b", className: "fr-empty" }, t("loading")))
+  if (error) return shell(e("div", { key: "b", className: "fr-empty" }, t("error.load", { message: error })))
+  if (books.length === 0 || meta === null) return shell(e("div", { key: "b", className: "fr-body" }, e(EmptyState, { t })))
 
   const body = (() => {
     if (view === "guide") {
@@ -906,7 +974,7 @@ function FastReadBody(props) {
       if (graph.nodes.length === 0) return e("div", { className: "fr-empty" }, t("no.graph"))
       return e("div", { key: "graph", className: "fr-body" }, [
         e(GraphCanvas, {
-          key: "canvas",
+          key: `canvas-${book.bookId}`,
           nodes: visibleNodes,
           edges: visibleEdges,
           selectedId: selected,
@@ -934,9 +1002,7 @@ function FastReadBody(props) {
     return e(EvidenceView, { key: "ev", graph, t, onJump: jump, onSelect: setSelected })
   })()
 
-  return e("div", { className: "fr-root" }, [
-    e("style", { key: "css" }, CSS),
-    head,
+  return shell([
     e("div", { key: "tabs", className: "fr-tabs" }, tabs.map(([id, label]) => e("button", {
       key: id,
       className: view === id ? "fr-tab active" : "fr-tab",

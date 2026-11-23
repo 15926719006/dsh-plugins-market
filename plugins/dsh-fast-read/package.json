@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-fast-read",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "把一本书拆成导读、脑图、关系图与带出处的知识图谱：导入 EPUB/PDF/TXT/DOCX，每个节点都能点回原书原句。",

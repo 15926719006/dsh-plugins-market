@@ -25,6 +25,9 @@ export function parseEpub(bytes) {
   try {
     entries = readZip(bytes)
   } catch (error) {
+    if (error?.code === 'encrypted') {
+      throw new ParseError(PARSE_CODES.encrypted, '这本 EPUB 的条目是加密的，请换一份非加密的 EPUB', error)
+    }
     throw corrupt(error, 'EPUB')
   }
   assertNoDrm(entries)
@@ -50,8 +53,10 @@ export function parseEpub(bytes) {
 
   const chapters = []
   for (const tag of allTags(opfText, 'itemref')) {
-    const idref = attributesOf(tag).idref
+    const attrs = attributesOf(tag)
+    const idref = attrs.idref
     if (idref === undefined) continue
+    if (attrs.linear === 'no') continue
     const item = manifest.get(idref)
     if (item === undefined || !isTextDocument(item.type, item.href)) continue
     const path = resolvePath(base, item.href)
@@ -76,7 +81,11 @@ export function parseEpub(bytes) {
 function assertNoDrm(entries) {
   const text = readEntryText(entries, 'META-INF/encryption.xml')
   if (text === undefined) return
-  if (/Adobe|Encryption|EncryptedKey/i.test(text) && !/font/i.test(text)) {
+  const algorithms = [...text.matchAll(/Algorithm\s*=\s*["']([^"']+)["']/gi)].map((match) => match[1])
+  // Font obfuscation (IDPF embedding or Adobe's font algorithm) is not DRM.
+  const fontOnly = algorithms.length > 0 && algorithms.every((algorithm) => /embedding|font/i.test(algorithm))
+  if (fontOnly) return
+  if (algorithms.length > 0 || /<EncryptedData\b/i.test(text)) {
     throw new ParseError(PARSE_CODES.encrypted, '这本 EPUB 有 DRM 保护，请换一份非加密的 EPUB')
   }
 }
@@ -88,7 +97,15 @@ function assertNoDrm(entries) {
  * @returns {string | undefined} the text, or undefined when absent.
  */
 function readEntryText(entries, path) {
-  const raw = entries.get(path) ?? entries.get(decodeURIComponent(path))
+  const direct = entries.get(path)
+  if (direct !== undefined) return Buffer.from(direct).toString('utf8')
+  let decoded
+  try {
+    decoded = decodeURIComponent(path)
+  } catch {
+    return undefined
+  }
+  const raw = entries.get(decoded)
   if (raw === undefined) return undefined
   return Buffer.from(raw).toString('utf8')
 }

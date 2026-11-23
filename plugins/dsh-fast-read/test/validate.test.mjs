@@ -82,3 +82,16 @@ test('applyMindmap flags a reference to a node that does not exist', () => {
   const { issues } = applyMindmap({ root: { name: '书', children: [{ name: '系统 1', nodeId: 'n-nope' }] } }, { nodes: [] })
   assert.equal(issues[0].code, 'unknown-node')
 })
+
+test('checkQuote folds full-width forms and punctuation runs', () => {
+  const text = '本书讨论 ＳＹＳＴＥＭ 与 ΑΒΓ 两个概念——注意是长期——的影响。\n这是长期……的影响。\n“你为什么这样想？”'
+  assert.equal(checkQuote(text, '本书讨论 SYSTEM 与 ΑΒΓ 两个概念-注意是长期-的影响。').ok, true)
+  assert.equal(checkQuote(text, '"你为什么这样想?"').ok, true)
+  assert.equal(checkQuote(text, '这是长期...的影响').ok, true)
+})
+
+test('checkQuote refuses a whole-chapter quote', () => {
+  const result = checkQuote(CHAPTER.text, '甲'.repeat(300))
+  assert.equal(result.ok, false)
+  assert.equal(result.reason, 'quote-too-long')
+})

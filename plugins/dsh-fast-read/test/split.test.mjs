@@ -35,3 +35,16 @@ test('splitChapters merges tiny chapters without losing words', () => {
   assert.equal(chapters.length, 2)
   assert.ok(chapters[0].text.includes('乙'))
 })
+
+test('splitChapters cuts a single over-long line instead of keeping it whole', () => {
+  const chapters = splitChapters('字'.repeat(20000), { targetMax: 6000 })
+  assert.ok(chapters.length >= 4)
+  for (const chapter of chapters) assert.ok(charCount(chapter.text) <= 6000)
+  assert.equal(chapters.reduce((sum, chapter) => sum + chapter.text.length, 0), 20000)
+})
+
+test('splitChapters cuts a long line after a heading', () => {
+  const chapters = splitChapters(`第一章\n${'甲'.repeat(9000)}`, { targetMax: 6000 })
+  assert.ok(chapters.length >= 2)
+  for (const chapter of chapters) assert.ok(charCount(chapter.text) <= 6000)
+})

@@ -9,7 +9,7 @@
 
 import { createHash } from 'node:crypto'
 
-import { lineOfOffset, normalizeForMatch, tidyText } from './text.js'
+import { lineOfOffset, normalizeForMatch, normalizeWithOffsets, tidyText } from './text.js'
 
 /** Node types the graph accepts. */
 export const NODE_TYPES = ['concept', 'claim', 'mechanism', 'example', 'person', 'term', 'method']
@@ -19,6 +19,26 @@ export const EDGE_TYPES = ['causes', 'supports', 'contradicts', 'evolves', 'part
 
 /** Shortest quote that may count as evidence. */
 export const MIN_QUOTE = 8
+
+/** Longest quote that may count as evidence; a whole chapter is not a citation. */
+export const MAX_QUOTE = 240
+
+/** Normalised chapter texts, so many quotes in one chapter are walked once. */
+const TEXT_CACHE = new Map()
+
+/**
+ * Normalised text and its offsets, cached for the life of a few chapters.
+ * @param {string} text - the chapter text.
+ * @returns {{ normalized: string, offsets: number[] }} the key and offsets.
+ */
+function cachedNormalize(text) {
+  const cached = TEXT_CACHE.get(text)
+  if (cached !== undefined) return cached
+  const value = normalizeWithOffsets(text)
+  if (TEXT_CACHE.size >= 8) TEXT_CACHE.clear()
+  TEXT_CACHE.set(text, value)
+  return value
+}
 
 /**
  * Find a quote inside one chapter.
@@ -37,39 +57,16 @@ export function checkQuote(chapterText, quote) {
   if (needle.length < MIN_QUOTE) {
     return { ok: false, offset: -1, line: 0, nearest: '', reason: 'quote-too-short' }
   }
-  const haystack = normalizeWithMap(String(chapterText ?? ''))
+  if (needle.length > MAX_QUOTE) {
+    return { ok: false, offset: -1, line: 0, nearest: tidyText(quote).slice(0, 80), reason: 'quote-too-long' }
+  }
+  const haystack = cachedNormalize(String(chapterText ?? ''))
   const at = haystack.normalized.indexOf(needle)
   if (at >= 0) {
     const offset = haystack.offsets[at]
     return { ok: true, offset, line: lineOfOffset(chapterText, offset), nearest: '' }
   }
   return { ok: false, offset: -1, line: 0, nearest: nearestPassage(chapterText, quote) }
-}
-
-/**
- * Normalise text while remembering where each character came from.
- * @param {string} text - the original text.
- * @returns {{ normalized: string, offsets: number[] }} the key and its offsets.
- */
-function normalizeWithMap(text) {
-  const parts = []
-  const offsets = []
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]
-    if (/\s/.test(char)) continue
-    let mapped = char
-    if (char === '“' || char === '”' || char === '„' || char === '‟') mapped = '"'
-    else if (char === '‘' || char === '’' || char === '‚' || char === '‛') mapped = "'"
-    else if (char === '—' || char === '–' || char === '―') mapped = '-'
-    else if (char === '…') {
-      parts.push('...')
-      offsets.push(index, index, index)
-      continue
-    } else if (char >= 'A' && char <= 'Z') mapped = char.toLowerCase()
-    parts.push(mapped)
-    offsets.push(index)
-  }
-  return { normalized: parts.join(''), offsets }
 }
 
 /**
@@ -86,7 +83,7 @@ function nearestPassage(chapterText, quote) {
   const text = String(chapterText ?? '')
   const anchor = normalizeForMatch(quote).slice(0, 6)
   if (anchor.length === 0) return tidyText(text).slice(0, 80)
-  const haystack = normalizeWithMap(text)
+  const haystack = cachedNormalize(text)
   let at = haystack.normalized.indexOf(anchor)
   if (at < 0) {
     for (let size = anchor.length - 1; size >= 3 && at < 0; size -= 1) at = haystack.normalized.indexOf(anchor.slice(0, size))
@@ -259,7 +256,10 @@ export function applyMindmap(payload, graph) {
   let count = 0
   const walk = (node, depth) => {
     count += 1
-    if (depth > 5) issues.push({ code: 'too-deep', message: '脑图超过 5 层' })
+    if (depth > 5) {
+      issues.push({ code: 'too-deep', message: '脑图超过 5 层' })
+      return
+    }
     if (typeof node?.nodeId === 'string' && !ids.has(node.nodeId)) {
       issues.push({ code: 'unknown-node', name: node.name, nodeId: node.nodeId, message: `脑图引用了不存在的节点 ${node.nodeId}` })
     }

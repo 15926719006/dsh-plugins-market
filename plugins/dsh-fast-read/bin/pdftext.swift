@@ -67,6 +67,11 @@ guard let document = PDFDocument(url: url) else {
     FileHandle.standardError.write("cannot open pdf\n".data(using: .utf8)!)
     exit(3)
 }
+// A locked document answers empty pages; say so instead of OCR'ing blank pages for minutes.
+if document.isLocked {
+    FileHandle.standardError.write("pdf is locked\n".data(using: .utf8)!)
+    exit(4)
+}
 
 let title = (document.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String) ?? url.deletingPathExtension().lastPathComponent
 emit(MetaLine(title: title, pages: document.pageCount))

@@ -41,6 +41,9 @@ export async function parsePdf(path, bytes) {
     const result = await run(binary, [path], { maxBuffer: 256 * 1024 * 1024 })
     stdout = result.stdout
   } catch (error) {
+    if (error?.code === 4) {
+      throw new ParseError(PARSE_CODES.encrypted, '这个 PDF 有密码保护，请先解除密码再导入', error)
+    }
     const detail = error instanceof Error ? error.message : String(error)
     throw new ParseError(PARSE_CODES.corrupt, `PDF 解析失败：${detail.slice(0, 300)}`, error)
   }

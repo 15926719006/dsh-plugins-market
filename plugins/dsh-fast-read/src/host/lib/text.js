@@ -77,24 +77,75 @@ export function tidyText(text) {
     .trim()
 }
 
+/** One character's comparison form: NFKC, unified quotes and dashes, ASCII-safe lowercase. */
+export function normalizeChar(char) {
+  const folded = char.normalize('NFKC')
+  if (folded === '“' || folded === '”' || folded === '„' || folded === '‟') return '"'
+  if (folded === '‘' || folded === '’' || folded === '‚' || folded === '‛') return "'"
+  if (folded === '—' || folded === '–' || folded === '―' || folded === '－') return '-'
+  if (folded === '…') return '.'
+  if (folded.length === 1) {
+    const lower = folded.toLowerCase()
+    return lower.length === 1 ? lower : folded
+  }
+  return folded
+}
+
 /**
  * Normalise text for quote matching only.
  *
- * Removes every whitespace character, unifies curly quotes and dashes with
- * their plain counterparts, and lowercases ASCII. Never store the result: it
- * is a comparison key, not content.
+ * Removes every whitespace character, folds full-width forms through NFKC,
+ * unifies quote and dash styles, and collapses runs of dashes and dots so a
+ * book's `——` matches a quote's `—`, and `……` matches `...`. Never store the
+ * result: it is a comparison key, not content.
  *
  * @param {string} text - the text to normalise.
  * @returns {string} the comparison key.
  */
 export function normalizeForMatch(text) {
-  return String(text ?? '')
-    .replace(/[\s\u00a0\u3000]+/g, '')
-    .replace(/[“”„‟]/g, '"')
-    .replace(/[‘’‚‛]/g, "'")
-    .replace(/[—–―]/g, '-')
-    .replace(/…/g, '...')
-    .toLowerCase()
+  return normalizeWithOffsets(String(text ?? '')).normalized
+}
+
+/**
+ * Normalise text while remembering where each character came from.
+ *
+ * Multi-character expansions (an ellipsis, a ligature) and collapsed runs all
+ * point back at the character that produced them, so an offset found in the
+ * normalised text is still a real offset in the book.
+ *
+ * @param {string} text - the original text.
+ * @returns {{ normalized: string, offsets: number[] }} the key and its offsets.
+ */
+export function normalizeWithOffsets(text) {
+  const parts = []
+  const offsets = []
+  let lastDash = -1
+  let dots = 0
+  for (let index = 0; index < String(text ?? '').length; index += 1) {
+    const char = text[index]
+    if (/\s/.test(char)) continue
+    const folded = normalizeChar(char)
+    for (const piece of folded) {
+      if (piece === '-') {
+        if (lastDash >= 0) continue
+        lastDash = index
+        dots = 0
+        parts.push('-')
+        offsets.push(index)
+        continue
+      }
+      lastDash = -1
+      if (piece === '.') {
+        if (dots >= 3) continue
+        dots += 1
+      } else {
+        dots = 0
+      }
+      parts.push(piece)
+      offsets.push(index)
+    }
+  }
+  return { normalized: parts.join(''), offsets }
 }
 
 /**

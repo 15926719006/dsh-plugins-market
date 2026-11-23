@@ -59,6 +59,21 @@ export class FastRead {
    */
   constructor(ctx) {
     this.ctx = ctx
+    /** Per-book write queues: two record calls for one book never interleave. */
+    this.locks = new Map()
+  }
+
+  /**
+   * Run one mutation of a book after every earlier mutation of that book settled.
+   * @param {string} bookId - the book.
+   * @param {() => Promise<any>} operation - the mutation.
+   * @returns {Promise<any>} its result.
+   */
+  async withBookLock(bookId, operation) {
+    const previous = this.locks.get(bookId) ?? Promise.resolve()
+    const next = previous.then(operation, operation)
+    this.locks.set(bookId, next.then(() => undefined, () => undefined))
+    return next
   }
 
   /**
@@ -158,6 +173,18 @@ export class FastRead {
    * @returns {Promise<any>} what was accepted and what was rejected.
    */
   async record(root, bookId, kind, payload) {
+    return this.withBookLock(bookId, () => this.recordUnlocked(root, bookId, kind, payload))
+  }
+
+  /**
+   * The body of {@link record}, running under the book's write lock.
+   * @param {string} root - the workspace root.
+   * @param {string} bookId - the book.
+   * @param {string} kind - the record kind.
+   * @param {any} payload - the model's contribution.
+   * @returns {Promise<any>} what was accepted.
+   */
+  async recordUnlocked(root, bookId, kind, payload) {
     const paths = bookPaths(root, bookId)
     const meta = await readJson(paths.meta, undefined)
     if (meta === undefined) throw new ParseError(PARSE_CODES.empty, `找不到书 ${bookId}`)
@@ -170,18 +197,18 @@ export class FastRead {
 
     if (kind === 'nodes') {
       const items = Array.isArray(payload) ? payload : payload?.nodes ?? []
-      if (items.length === 0) issues = [{ code: 'empty-payload', message: 'nodes 为空：payload 要写成 { "nodes": [ … ] }' }]
+      const emptyIssue = items.length === 0 ? [{ code: 'empty-payload', message: 'nodes 为空：payload 要写成 { "nodes": [ … ] }' }] : []
       const result = applyNodes(graph, chapters, items)
       nextGraph = result.graph
-      issues = result.issues
+      issues = [...emptyIssue, ...result.issues]
       accepted = result.accepted
       await writeJson(paths.graph, nextGraph)
     } else if (kind === 'edges') {
       const items = Array.isArray(payload) ? payload : payload?.edges ?? []
-      if (items.length === 0) issues = [{ code: 'empty-payload', message: 'edges 为空：payload 要写成 { "edges": [ … ] }' }]
+      const emptyIssue = items.length === 0 ? [{ code: 'empty-payload', message: 'edges 为空：payload 要写成 { "edges": [ … ] }' }] : []
       const result = applyEdges(graph, chapters, items)
       nextGraph = result.graph
-      issues = result.issues
+      issues = [...emptyIssue, ...result.issues]
       accepted = result.accepted
       await writeJson(paths.graph, nextGraph)
     } else if (kind === 'chapter-summary') {
@@ -210,8 +237,12 @@ export class FastRead {
     } else if (kind === 'mindmap') {
       const result = applyMindmap(payload, nextGraph)
       issues = result.issues
-      await writeJson(paths.mindmap, result.mindmap)
-      accepted = 1
+      // A mind map that points at nodes which do not exist is not written:
+      // the page would show empty branches and the book would read as done.
+      if (issues.length === 0) {
+        await writeJson(paths.mindmap, result.mindmap)
+        accepted = 1
+      }
     } else {
       throw new ParseError(PARSE_CODES.unsupported, `未知的 kind: ${kind}`)
     }

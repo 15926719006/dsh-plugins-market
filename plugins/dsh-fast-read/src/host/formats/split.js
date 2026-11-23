@@ -138,14 +138,16 @@ function splitLong(chapters, targetMax) {
     let current = []
     let size = 0
     for (const line of chapter.text.split('\n')) {
-      const lineSize = charCount(line)
-      if (size > 0 && size + lineSize > targetMax) {
-        parts.push(current.join('\n'))
-        current = []
-        size = 0
+      for (const piece of cutLine(line, targetMax)) {
+        const pieceSize = charCount(piece)
+        if (size > 0 && size + pieceSize > targetMax) {
+          parts.push(current.join('\n'))
+          current = []
+          size = 0
+        }
+        current.push(piece)
+        size += pieceSize
       }
-      current.push(line)
-      size += lineSize
     }
     if (current.length > 0) parts.push(current.join('\n'))
     parts.forEach((part, index) => {
@@ -156,6 +158,41 @@ function splitLong(chapters, targetMax) {
     })
   }
   return out
+}
+
+/**
+ * Cut one line so that no piece exceeds the window.
+ *
+ * A book with no paragraph breaks (scanned OCR, a pasted essay) would otherwise
+ * produce one chapter far above the extraction window, which breaks the call
+ * estimate and makes every quote check walk the whole book. Sentences are tried
+ * first; a sentence that is still too long is cut by characters.
+ *
+ * @param {string} line - one line of text.
+ * @param {number} targetMax - the largest allowed size in non-space characters.
+ * @returns {string[]} pieces that fit.
+ */
+function cutLine(line, targetMax) {
+  if (charCount(line) <= targetMax) return [line]
+  const sentences = line.split(/(?<=[。！？；!?;])/u).filter((part) => part.length > 0)
+  const pieces = []
+  let current = ''
+  const flush = () => {
+    if (current.length > 0) pieces.push(current)
+    current = ''
+  }
+  for (const sentence of sentences) {
+    if (charCount(sentence) > targetMax) {
+      flush()
+      const step = Math.max(1, targetMax)
+      for (let index = 0; index < sentence.length; index += step) pieces.push(sentence.slice(index, index + step))
+      continue
+    }
+    if (charCount(current) + charCount(sentence) > targetMax) flush()
+    current += sentence
+  }
+  flush()
+  return pieces
 }
 
 /**

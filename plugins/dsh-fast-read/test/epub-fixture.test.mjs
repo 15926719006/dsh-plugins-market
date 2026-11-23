@@ -22,14 +22,14 @@ function buildEpub() {
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
 </container>`)
-  const chapters = ['引言', '第一章 起点', '第二章 转折', '第三章 收束']
+  const chapters = ['引言', '第一章 起点', '第二章 转折', '第三章 收束', '附录 不该进来']
   const manifest = []
   const spine = []
   chapters.forEach((title, index) => {
     const id = `ch${index + 1}`
-    const file = `${id}.xhtml`
+    const file = index === chapters.length - 1 ? '100% notes.xhtml' : `${id}.xhtml`
     manifest.push(`<item id="${id}" href="${file}" media-type="application/xhtml+xml"/>`)
-    spine.push(`<itemref idref="${id}"/>`)
+    spine.push(index === chapters.length - 1 ? `<itemref idref="${id}" linear="no"/>` : `<itemref idref="${id}"/>`)
     const body = Array.from({ length: 40 }, (_, line) =>
       `${title}的第${line + 1}段：这是一段用来验证章节切分、字号上限与出处引用的中文正文。`).join('\n<p>')
     writeFileSync(join(work, 'OEBPS', file), `<?xml version="1.0" encoding="utf-8"?>
@@ -58,6 +58,7 @@ test('parseEpub reads a calibre-shaped EPUB end to end', () => {
   assert.equal(book.author, '测试作者')
   assert.ok(book.chapters.length >= 3, `only ${book.chapters.length} chapters`)
   assert.ok(book.chapters.some((chapter) => chapter.text.includes('第二章')))
+  assert.ok(!book.chapters.some((chapter) => chapter.text.includes('附录')), 'linear="no" content leaked into chapters')
   for (const chapter of book.chapters) {
     assert.ok(chapter.text.length <= 6000, `${chapter.title} is longer than the extraction window`)
     assert.ok(!/<[a-z]/i.test(chapter.text), 'markup leaked into chapter text')

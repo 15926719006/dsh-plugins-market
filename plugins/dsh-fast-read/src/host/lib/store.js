@@ -8,6 +8,7 @@
  * leaves a half-written graph behind.
  */
 
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -75,7 +76,7 @@ export async function readJson(file, fallback) {
  * @returns {Promise<void>} resolves once written.
  */
 export async function writeJson(file, value) {
-  const temp = `${file}.${process.pid}.tmp`
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
   await rename(temp, file)
 }
@@ -100,7 +101,7 @@ export async function readText(file) {
  * @returns {Promise<void>} resolves once written.
  */
 export async function writeText(file, text) {
-  const temp = `${file}.${process.pid}.tmp`
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(temp, text, 'utf8')
   await rename(temp, file)
 }
@@ -134,7 +135,21 @@ export async function listBooks(root) {
  * @param {string} root - the workspace root.
  * @returns {Promise<void>} resolves once the index is current.
  */
+let indexChain = Promise.resolve()
+
 export async function writeIndex(root) {
+  // Two books recording at once must not rewrite the index from stale listings.
+  const run = indexChain.then(() => writeIndexNow(root), () => writeIndexNow(root))
+  indexChain = run.then(() => undefined, () => undefined)
+  return run
+}
+
+/**
+ * The body of {@link writeIndex}, already serialized against other writers.
+ * @param {string} root - the workspace root.
+ * @returns {Promise<void>} resolves once the index is current.
+ */
+async function writeIndexNow(root) {
   const books = await listBooks(root)
   const index = {
     schemaVersion: 1,

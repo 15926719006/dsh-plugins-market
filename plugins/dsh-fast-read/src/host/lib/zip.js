@@ -41,14 +41,52 @@ export function readZip(bytes) {
     const commentLength = buf.readUInt16LE(cursor + 32)
     const localOffset = buf.readUInt32LE(cursor + 42)
     const flags = buf.readUInt16LE(cursor + 8)
-    const name = buf.toString(flags & 0x800 ? 'utf8' : 'latin1', cursor + 46, cursor + 46 + nameLength)
+    if ((flags & 0x1) !== 0 || (flags & 0x40) !== 0) {
+      throw zipError('this archive is encrypted', 'encrypted')
+    }
+    const rawName = buf.subarray(cursor + 46, cursor + 46 + nameLength)
     cursor += 46 + nameLength + extraLength + commentLength
 
-    if (name.endsWith('/')) continue
+    const names = decodeNames(rawName, flags)
+    if (names.some((name) => name.endsWith('/'))) continue
     const data = readEntry(buf, localOffset, method, compressedSize, uncompressedSize)
-    if (data !== undefined) entries.set(name.replace(/^\.\//, ''), data)
+    if (data === undefined) continue
+    for (const name of names) entries.set(name.replace(/^\.\//, ''), data)
   }
   return entries
+}
+
+/**
+ * Names one entry may be looked up by.
+ *
+ * Production tools often write UTF-8 names without setting the language flag,
+ * so a strict UTF-8 read is tried first and the latin1 reading is kept as an
+ * alias. Whichever spelling a document's href uses, the entry is found.
+ *
+ * @param {Buffer} bytes - the raw name bytes.
+ * @param {number} flags - the general-purpose bit flags.
+ * @returns {string[]} candidate names, best first.
+ */
+function decodeNames(bytes, flags) {
+  const utf8 = tryDecode(bytes, 'utf8')
+  const latin = bytes.toString('latin1')
+  if ((flags & 0x800) !== 0) return utf8 === undefined ? [latin] : [utf8]
+  if (utf8 === undefined) return [latin]
+  return utf8 === latin ? [utf8] : [utf8, latin]
+}
+
+/**
+ * Decode bytes as UTF-8, or report that they are not valid UTF-8.
+ * @param {Buffer} bytes - the bytes.
+ * @param {string} encoding - the encoding to try.
+ * @returns {string | undefined} the text.
+ */
+function tryDecode(bytes, encoding) {
+  try {
+    return new TextDecoder(encoding, { fatal: true }).decode(bytes)
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -101,8 +139,9 @@ function readEntry(buf, localOffset, method, compressedSize, uncompressedSize) {
  * @param {string} message - what went wrong.
  * @returns {Error} the error, named for callers that branch on it.
  */
-function zipError(message) {
+function zipError(message, code) {
   const error = new Error(message)
   error.name = 'ZipError'
+  if (code !== undefined) error.code = code
   return error
 }
