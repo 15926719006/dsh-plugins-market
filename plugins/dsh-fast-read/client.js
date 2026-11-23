@@ -190,9 +190,9 @@ const CSS = `
 .fr-svg.dragging{cursor:grabbing}
 .fr-node{cursor:pointer;outline:none}
 .fr-node:focus-visible circle:first-of-type{stroke:#4c8dff;stroke-width:2}
-.fr-node text{font-size:10.5px;fill:var(--dsw-alias-label-primary,#333);pointer-events:auto}
-.fr-node.dim{opacity:.18}
-.fr-edge{stroke-width:1;opacity:.55}
+.fr-node text{font-size:10.5px;fill:var(--dsw-alias-label-primary,#333);pointer-events:none}
+.fr-node.dim{opacity:.22}
+.fr-edge{stroke-width:1.3;opacity:.75}
 .fr-edge.dim{opacity:.08}
 .fr-hint{position:absolute;left:10px;bottom:10px;padding:4px 9px;border-radius:99px;background:var(--dsw-alias-bg-layer-1,rgba(255,255,255,.9));border:.5px solid var(--dsw-alias-border-l2,#ddd);font-size:11.5px;color:var(--dsw-alias-label-secondary,#777);cursor:pointer}
 .fr-drawer{flex:none;max-height:min(46%,380px);overflow:auto;border-top:.5px solid var(--dsw-alias-border-l2,#e0e0e0);background:var(--dsw-alias-bg-layer-1,transparent);padding:10px 13px 14px}
@@ -207,15 +207,34 @@ const CSS = `
 .fr-ego-row{display:flex;align-items:center;gap:6px;font-size:12.5px}
 `
 
-/** Read one workspace file through the workspace-files service. */
+/**
+ * Read one workspace file through the workspace-files service.
+ *
+ * The service returns text one line window at a time (5000 lines by default),
+ * and a knowledge graph for a long book easily exceeds that. Reading a single
+ * page would hand JSON.parse a truncated string, which used to leave the graph
+ * empty with no visible reason. Pages are joined until the file reports its end.
+ */
 async function readWorkspaceFile(ctx, sessionId, path) {
-  try {
-    const result = await ctx.remote.workspaceFiles.read(sessionId, path, {}, undefined)
-    if (result && result.ok === true) return result.value.text
-  } catch (error) {
-    /* a missing file is the normal empty state */
+  const chunks = []
+  let offset = 1
+  for (let page = 0; page < 60; page += 1) {
+    let result
+    try {
+      result = await ctx.remote.workspaceFiles.read(sessionId, path, { offset, limit: 4000 }, undefined)
+    } catch (error) {
+      return undefined
+    }
+    if (!result || result.ok !== true) return undefined
+    const value = result.value ?? {}
+    if (typeof value.text !== "string") return undefined
+    chunks.push(value.text)
+    if (value.eof !== false) return chunks.join("\n")
+    const lines = Number(value.lines) || 0
+    if (lines <= 0) return chunks.join("\n")
+    offset += lines
   }
-  return undefined
+  return chunks.join("\n")
 }
 
 function parseJson(text, fallback) {
@@ -303,6 +322,9 @@ function useLibrary(ctx, sessionId) {
         readWorkspaceFile(ctx, sessionId, `${LIBRARY}/${pick}/mindmap.json`),
       ])
       if (!current()) return
+      if (typeof graphText === "string" && graphText.length > 0 && parseJson(graphText, null) === null) {
+        console.warn("[fast-read] graph.json 无法解析，已按空图谱显示", graphText.length)
+      }
       const meta = parseJson(metaText, null)
       const fingerprint = [
         pick,
@@ -513,15 +535,18 @@ function layoutGraph(nodes, edges) {
     .map((edge) => ({ source: edge.source, target: edge.target }))
   const ideal = Math.max(90, Math.min(160, Math.sqrt((width * height) / (count + 2)) * 0.75))
   const chapterIds = [...new Set(nodes.map((node) => node.chapter ?? 0))].sort((a, b) => a - b)
+  const anchored = chapterIds.length > 1 && chapterIds.length <= 6
   const anchors = new Map()
   chapterIds.forEach((chapter, index) => {
     const angle = chapterIds.length === 1 ? 0 : (index / chapterIds.length) * Math.PI * 2 - Math.PI / 2
-    anchors.set(chapter, {
-      x: width / 2 + Math.cos(angle) * (chapterIds.length === 1 ? 0 : width * 0.22),
-      y: height / 2 + Math.sin(angle) * (chapterIds.length === 1 ? 0 : height * 0.24),
-    })
+    anchors.set(chapter, anchored
+      ? {
+        x: width / 2 + Math.cos(angle) * width * 0.2,
+        y: height / 2 + Math.sin(angle) * height * 0.22,
+      }
+      : { x: width / 2, y: height / 2 })
   })
-  const steps = 320
+  const steps = count > 100 ? 520 : 320
 
   for (let step = 0; step < steps; step += 1) {
     const alpha = 1 - step / steps
@@ -552,7 +577,7 @@ function layoutGraph(nodes, edges) {
       const dx = b.x - a.x
       const dy = b.y - a.y
       const distance = Math.max(0.01, Math.hypot(dx, dy))
-      const pull = (distance - ideal) * 0.12 * alpha
+      const pull = (distance - ideal) * 0.1 * alpha
       const fx = (dx / distance) * pull
       const fy = (dy / distance) * pull
       a.vx += fx
@@ -564,8 +589,8 @@ function layoutGraph(nodes, edges) {
       const id = ids[index]
       const point = positions.get(id)
       const anchor = anchors.get(nodes[index].chapter ?? 0) ?? { x: width / 2, y: height / 2 }
-      point.vx += (anchor.x - point.x) * 0.03 * alpha
-      point.vy += (anchor.y - point.y) * 0.03 * alpha
+      point.vx += (anchor.x - point.x) * (anchored ? 0.04 : 0.015) * alpha
+      point.vy += (anchor.y - point.y) * (anchored ? 0.04 : 0.015) * alpha
       point.x += point.vx * 0.5
       point.y += point.vy * 0.5
       point.vx *= 0.55
@@ -606,7 +631,7 @@ function layoutGraph(nodes, edges) {
 
 function radiusOf(weight) {
   const value = Math.min(5, Math.max(1, Number(weight) || 3))
-  return 5 + (value - 1) * 3
+  return 5 + (value - 1) * 2.9
 }
 
 function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
@@ -631,6 +656,11 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
   }, [hover, selectedId, edges])
 
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
+  const labelBudget = nodes.length <= 40 ? nodes.length : 15
+  const labelled = useMemo(() => {
+    const ranked = [...nodes].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).slice(0, labelBudget)
+    return new Set(ranked.map((node) => node.id))
+  }, [nodes, labelBudget])
 
   useEffect(() => {
     const node = svgRef.current
@@ -702,6 +732,7 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
             role: "button",
             "aria-label": node.name,
             "aria-pressed": selected,
+            "data-node": node.name,
             onMouseEnter: () => setHover(node.id),
             onMouseLeave: () => setHover(null),
             onFocus: () => setHover(node.id),
@@ -725,7 +756,7 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
               fill: TYPE_COLOR[node.type] ?? "#7c8ba1",
               opacity: 0.9,
             }),
-            nodes.length <= 30 || (node.weight ?? 3) >= 4 || selected || (hover !== null && hover === node.id)
+            labelled.has(node.id) || selected || (hover !== null && hover === node.id)
               ? e("text", {
                 key: "label",
                 x: radiusOf(node.weight) + 4,
@@ -897,9 +928,18 @@ function FastReadBody(props) {
   }
 
   const visibleNodes = useMemo(() => {
-    if (showAll || graph.nodes.length <= 300) return graph.nodes
-    return graph.nodes.filter((node) => (node.weight ?? 3) >= 3)
-  }, [graph.nodes, showAll])
+    if (showAll || graph.nodes.length <= 60) return graph.nodes
+    const floor = graph.nodes.length > 150 ? 5 : 4
+    const core = graph.nodes.filter((node) => (node.weight ?? 3) >= floor)
+    // Pull in the core's neighbours: a star chart with no edges shows nothing.
+    const keep = new Set(core.map((node) => node.id))
+    for (const edge of graph.edges) {
+      if (keep.has(edge.source)) keep.add(edge.target)
+      else if (keep.has(edge.target)) keep.add(edge.source)
+    }
+    const picked = graph.nodes.filter((node) => keep.has(node.id))
+    return picked.length > 220 ? core : picked
+  }, [graph.nodes, graph.edges, showAll])
   const hiddenCount = graph.nodes.length - visibleNodes.length
   const visibleIds = useMemo(() => new Set(visibleNodes.map((node) => node.id)), [visibleNodes])
   const visibleEdges = useMemo(() => graph.edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)), [graph.edges, visibleIds])
