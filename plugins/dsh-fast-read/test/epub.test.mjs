@@ -4,6 +4,7 @@ import test from 'node:test'
 
 import { ParseError } from '../src/host/lib/errors.js'
 import { parseEpub } from '../src/host/formats/epub.js'
+import { charCount } from '../src/host/lib/text.js'
 import { readZip } from '../src/host/lib/zip.js'
 
 const BOOK = '/Users/maka.li/Downloads/乡下人的悲歌 (J.D. 万斯) (z-library.sk, 1lib.sk, z-lib.sk).epub'
@@ -25,7 +26,9 @@ test('parseEpub recovers the book and its chapters', { skip: !hasBook }, () => {
   assert.ok(first.title.length > 0)
   const total = book.chapters.reduce((sum, chapter) => sum + chapter.text.length, 0)
   assert.ok(total > 140000 && total < 175000, `unexpected total ${total}`)
-  assert.ok(book.chapters.every((chapter) => chapter.text.length <= 6000))
+  // The contract is non-space characters; raw length also carries the newlines.
+  assert.ok(book.chapters.every((chapter) => charCount(chapter.text) <= 6000))
+  assert.ok(book.chapters.every((chapter) => chapter.text.length <= 7500))
   assert.ok(book.chapters.some((chapter) => chapter.text.includes('阿嬷')))
 })
 
