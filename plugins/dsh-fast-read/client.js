@@ -514,9 +514,9 @@ function keyOf(node, depth) {
 }
 
 /** Force layout, small and dependency-free: settle, then fit the drawing to its content. */
-function layoutGraph(nodes, edges) {
-  const width = 1000
-  const height = 720
+function layoutGraph(nodes, edges, canvasWidth, canvasHeight) {
+  const width = Math.max(520, canvasWidth)
+  const height = Math.max(360, canvasHeight)
   const positions = new Map()
   const count = Math.max(1, nodes.length)
   nodes.forEach((node, index) => {
@@ -610,18 +610,18 @@ function layoutGraph(nodes, edges) {
     maxY = Math.max(maxY, point.y)
   }
 
-  // Rescale into a fixed box so a sparse graph and a dense one both read well.
-  const targetWidth = 880
-  const targetHeight = 620
-  const spanX = Math.max(1, maxX - minX)
-  const spanY = Math.max(1, maxY - minY)
-  const scale = Math.min(targetWidth / spanX, targetHeight / spanY)
-  const offsetX = (targetWidth - spanX * scale) / 2
-  const offsetY = (targetHeight - spanY * scale) / 2
+  // Rescale into the canvas so a sparse graph and a dense one both read well.
+  // Positions are stretched independently on each axis: the canvas of a full
+  // page is far wider than tall, and fitting by the smaller ratio would leave
+  // most of it empty.
+  const targetWidth = Math.max(320, width - 120)
+  const targetHeight = Math.max(240, height - 120)
+  const scaleX = targetWidth / Math.max(1, maxX - minX)
+  const scaleY = targetHeight / Math.max(1, maxY - minY)
   for (const id of ids) {
     const point = positions.get(id)
-    point.x = (point.x - minX) * scale + offsetX
-    point.y = (point.y - minY) * scale + offsetY
+    point.x = (point.x - minX) * scaleX
+    point.y = (point.y - minY) * scaleY
   }
   return {
     positions,
@@ -635,7 +635,23 @@ function radiusOf(weight) {
 }
 
 function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
-  const layout = useMemo(() => layoutGraph(nodes, edges), [nodes, edges])
+  const wrapRef = useRef(null)
+  const [canvas, setCanvas] = useState({ width: 880, height: 560 })
+  useEffect(() => {
+    const node = wrapRef.current
+    if (node === null || typeof ResizeObserver === "undefined") return undefined
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect
+      if (rect === undefined || rect.width < 40) return
+      setCanvas((current) => {
+        const next = { width: Math.round(rect.width), height: Math.round(rect.height) }
+        return next.width === current.width && next.height === current.height ? current : next
+      })
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+  const layout = useMemo(() => layoutGraph(nodes, edges, canvas.width, canvas.height), [nodes, edges, canvas.width, canvas.height])
   const positions = layout.positions
   const bounds = layout.bounds
   const [hover, setHover] = useState(null)
@@ -691,7 +707,7 @@ function GraphCanvas({ nodes, edges, selectedId, onSelect, t, height }) {
     setDragging(false)
   }
 
-  return e("div", { className: "fr-graphwrap" }, [
+  return e("div", { className: "fr-graphwrap", ref: wrapRef }, [
     e("svg", {
       key: "svg",
       ref: svgRef,
@@ -894,9 +910,68 @@ function EmptyState({ t }) {
   ])
 }
 
+/** Left-sidebar entry id; the same value is the key of the full-page panel. */
+const PANEL_ID = "fast-read"
+
+/**
+ * The last Session seen while the conversation filled the main column.
+ *
+ * `ctx.sidebarRight.mounted` goes undefined as soon as a global page replaces
+ * the main column, which is exactly when the left page needs to know which
+ * workspace to read. Keeping the last real value bridges that moment.
+ */
+let lastSessionId = null
+
+/**
+ * The session whose workspace the left page should read.
+ *
+ * A global page has no session of its own, so it follows the session on screen;
+ * with none selected it still renders the empty state instead of failing.
+ */
+function useScreenSession(ctx, props) {
+  const direct = props.sessionId ?? props.tab?.sessionId
+  const [observed, setObserved] = useState(() => readMounted(ctx))
+  useEffect(() => {
+    if (direct !== undefined && direct !== null) return undefined
+    const observer = ctx.sidebarRight?.mounted
+    if (observer === undefined || observer === null) return undefined
+    setObserved(readMounted(ctx))
+    if (typeof observer.subscribe !== "function") return undefined
+    return observer.subscribe(() => setObserved(readMounted(ctx)))
+  }, [ctx, direct])
+  return direct ?? observed ?? lastSessionId ?? null
+}
+
+/**
+ * Read the current Session from the sidebar controller, tolerating both shapes
+ * the observable may take (a snapshot getter or an observable value).
+ * @param {object} ctx - the client context.
+ * @returns {string | null} the session id.
+ */
+function readMounted(ctx) {
+  const observer = ctx.sidebarRight?.mounted
+  if (observer === undefined || observer === null) return null
+  try {
+    if (typeof observer.get === "function") return observer.get() ?? null
+    if (typeof observer.getSnapshot === "function") return observer.getSnapshot() ?? null
+    if (typeof observer === "string") return observer
+  } catch (error) {
+    return null
+  }
+  return null
+}
+
+/** Full-page mount of the same view, on the left sidebar. */
+function FastReadPanel(props) {
+  const { ctx, t } = props
+  const sessionId = useScreenSession(ctx, props)
+  return e(FastReadBody, { ...props, ctx, t, sessionId, mode: "page" })
+}
+
 function FastReadBody(props) {
   const { ctx, t } = props
   const sessionId = props.sessionId ?? props.tab?.sessionId
+  const mode = props.mode ?? "tab"
   const { books, book, loading, error, refresh, select } = useLibrary(ctx, sessionId)
   const [view, setView] = useState("guide")
   const [selected, setSelected] = useState(null)
@@ -974,17 +1049,19 @@ function FastReadBody(props) {
       : null,
     e("span", { key: "spacer", className: "fr-spacer" }),
     e("button", { key: "refresh", className: "fr-btn", onClick: refresh }, t("action.refresh")),
-    e("button", {
-      key: "full",
-      className: "fr-btn",
-      onClick: () => {
-        try {
-          ctx.layout.openRightbar(true, true)
-        } catch (failure) {
-          console.warn("[fast-read] fullscreen failed", failure)
-        }
-      },
-    }, t("action.fullscreen")),
+    mode === "tab"
+      ? e("button", {
+        key: "full",
+        className: "fr-btn",
+        onClick: () => {
+          try {
+            ctx.layout.openRightbar(true, true)
+          } catch (failure) {
+            console.warn("[fast-read] fullscreen failed", failure)
+          }
+        },
+      }, t("action.fullscreen"))
+      : null,
   ])
 
   const shell = (content) => e("div", { className: "fr-root" }, [e("style", { key: "css" }, CSS), head, content])
@@ -1052,6 +1129,23 @@ function FastReadBody(props) {
   ])
 }
 
+function PanelIcon() {
+  return e("svg", { viewBox: "0 0 16 16", width: 16, height: 16, "aria-hidden": true }, [
+    e("path", {
+      key: "book",
+      d: "M2.4 3.2c1.7-.9 3.6-.9 5.6 0 2-.9 3.9-.9 5.6 0v9.4c-1.7-.9-3.6-.9-5.6 0-2-.9-3.9-.9-5.6 0V3.2z",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.3,
+      strokeLinejoin: "round",
+    }),
+    e("path", { key: "nodes", d: "M6 6.4h1.6M9.6 8.2H8M6.2 9.6l1.2-.7", stroke: "currentColor", strokeWidth: 1, strokeLinecap: "round" }),
+    e("circle", { key: "a", cx: 5.2, cy: 6.4, r: 1.1, fill: "currentColor" }),
+    e("circle", { key: "b", cx: 10.6, cy: 8.2, r: 1.1, fill: "currentColor" }),
+    e("circle", { key: "c", cx: 5.4, cy: 9.9, r: 1, fill: "currentColor" }),
+  ])
+}
+
 function BookIcon() {
   return e("svg", { viewBox: "0 0 16 16", width: 22, height: 22, "aria-hidden": true }, [
     e("path", {
@@ -1096,6 +1190,30 @@ function apply(ctx) {
     key: TAB_ID,
     locale: NS,
   }, (props) => e(FastReadBody, { ctx, t, ...props }))), "fast-read: body")
+
+  effect(() => {
+    const observer = ctx.sidebarRight?.mounted
+    if (observer === undefined || observer === null || typeof observer.subscribe !== "function") return undefined
+    const remember = () => {
+      const current = readMounted(ctx)
+      if (typeof current === "string" && current.length > 0) lastSessionId = current
+    }
+    remember()
+    return observer.subscribe(remember)
+  }, "fast-read: remember the session on screen")
+
+  effect(() => ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({
+    name: "sidebar.panellist",
+    id: PANEL_ID,
+    order: 7,
+    label: t("tab.title"),
+  }, PanelIcon)), "fast-read: sidebar entry")
+
+  effect(() => ctx.slots.inject("main", () => ctx.slots.register({
+    name: "main",
+    key: PANEL_ID,
+    id: PANEL_ID,
+  }, (props) => e(FastReadPanel, { ctx, t, ...props }))), "fast-read: page")
 
   effect(() => ctx.slots.inject("sidebar.right.pane.tab.title", () => ctx.slots.register({
     name: "sidebar.right.pane.tab.title",
