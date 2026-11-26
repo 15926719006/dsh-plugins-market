@@ -1,307 +1,332 @@
 {
-  "index": {
-    "title": {
-      "en": "Nemo's DSH Plugins",
-      "zh": "Nemo 的 DSH 插件集"
-    },
-    "description": {
-      "en": "Nemo's DSH plugins, installed straight from GitHub and pinned per commit.",
-      "zh": "Nemo 个人维护的 DSH 插件，直接从 GitHub 安装，按 commit 精确定位版本。"
-    }
+ "index": {
+  "title": {
+   "en": "Nemo's DSH Plugins",
+   "zh": "Nemo 的 DSH 插件集"
   },
-  "metadata": {
-    "categories": {
-      "ui": {
-        "title": {
-          "en": "Interface",
-          "zh": "界面"
-        }
-      },
-      "workflow": {
-        "title": {
-          "en": "Workflow",
-          "zh": "工作流"
-        }
-      },
-      "tools": {
-        "title": {
-          "en": "Tools",
-          "zh": "工具"
-        }
-      }
-    },
-    "labels": {
-      "productivity": {
-        "title": {
-          "en": "Productivity",
-          "zh": "效率"
-        }
-      },
-      "notifications": {
-        "title": {
-          "en": "Notifications",
-          "zh": "通知"
-        }
-      },
-      "quota": {
-        "title": {
-          "en": "Quota",
-          "zh": "额度"
-        }
-      },
-      "cost": {
-        "title": {
-          "en": "Cost",
-          "zh": "费用"
-        }
-      }
-    },
-    "sortKeys": {
-      "recommended": {
-        "title": {
-          "en": "Recommended",
-          "zh": "推荐度"
-        },
-        "order": "desc"
-      }
-    }
-  },
-  "plugins": {
-    "dsh-plugin-export": {
-      "title": {
-        "en": "Plugin Export",
-        "zh": "插件导出"
-      },
-      "description": {
-        "en": "Export an installed plugin bundle as one shareable .tgz, with the install instructions copied for you.",
-        "zh": "把已安装的插件打包成一个可直接分享、可直接安装的 .tgz，并自动复制安装说明。"
-      },
-      "category": "tools",
-      "labels": [
-        "productivity"
-      ],
-      "keywords": [
-        "export",
-        "bundle",
-        "tgz",
-        "share"
-      ],
-      "sortKeys": {
-        "recommended": 90
-      }
-    },
-    "dsh-pinned-top": {
-      "title": {
-        "en": "Pinned on Top",
-        "zh": "置顶在最上"
-      },
-      "description": {
-        "en": "Lift pinned sessions into a Pinned section at the very top of the sidebar, plus one-click archive for a whole workspace row.",
-        "zh": "把置顶会话收拢到侧边栏最上方的「置顶」分区，并可一键归档某个工作区的全部会话。"
-      },
-      "category": "ui",
-      "labels": [
-        "productivity"
-      ],
-      "keywords": [
-        "sidebar",
-        "pinned",
-        "sessions",
-        "archive"
-      ],
-      "sortKeys": {
-        "recommended": 100
-      }
-    },
-    "dsh-task-notify": {
-      "title": {
-        "en": "Task Notify",
-        "zh": "任务完成通知"
-      },
-      "description": {
-        "en": "macOS desktop notification when an agent turn finishes, fails or is interrupted, and when the agent waits for your answer.",
-        "zh": "任务跑完、出错或被打断，或者智能体停下来等你回答或审批时，弹一条 macOS 电脑通知。"
-      },
-      "category": "workflow",
-      "labels": [
-        "notifications"
-      ],
-      "keywords": [
-        "notification",
-        "macos",
-        "agent",
-        "reminder"
-      ],
-      "sortKeys": {
-        "recommended": 80
-      }
-    },
-    "dsh-opencode-quota": {
-      "title": {
-        "en": "OpenCode Go Quota",
-        "zh": "OpenCode Go 额度"
-      },
-      "description": {
-        "en": "OpenCode Go quota in the sidebar foot: the badge previews the rolling (5h) window's remaining percentage and reset time; open it for the 5h, weekly and monthly windows with usage and reset times.",
-        "zh": "在页面左下角显示 OpenCode Go 订阅额度：徽章预览滚动（5 小时）窗口的剩余百分比和刷新时间，点开查看 5 小时、每周、每月三个窗口的用量与重置时间。"
-      },
-      "category": "tools",
-      "labels": [
-        "quota"
-      ],
-      "keywords": [
-        "opencode",
-        "quota",
-        "usage",
-        "sidebar"
-      ],
-      "sortKeys": {
-        "recommended": 70
-      }
-    },
-    "dsh-cost-stat": {
-      "title": {
-        "en": "Task Cost",
-        "zh": "任务花费"
-      },
-      "description": {
-        "en": "Estimates the model spend of the current Session using DeepSeek's published pricing: peak/off-peak and cached/uncached input are priced separately, with per-turn and cumulative amounts.",
-        "zh": "按 DeepSeek 计费标准估算当前会话的模型调用花费：输入/输出、缓存命中/未命中、高峰/空闲分别计价，输入框下方显示累计、每条回复底部显示本轮金额。"
-      },
-      "category": "tools",
-      "labels": [
-        "cost"
-      ],
-      "keywords": [
-        "cost",
-        "price",
-        "token",
-        "deepseek",
-        "spend",
-        "billing"
-      ],
-      "sortKeys": {
-        "recommended": 60
-      }
-    },
-    "dsh-turn-duration": {
-      "title": {
-        "en": "Turn Duration",
-        "zh": "单轮耗时"
-      },
-      "description": {
-        "en": "How long each assistant turn took, shown under its final reply: model time, tool calls and waiting included, with the start and end clock times on hover.",
-        "zh": "在每条助手回复底部显示这一轮从开始到结束用了多久：包含模型思考、工具调用和等待，悬停可看起止时间；历史会话同样按日志补算。"
-      },
-      "category": "ui",
-      "labels": [
-        "productivity"
-      ],
-      "keywords": [
-        "duration",
-        "elapsed",
-        "timing",
-        "turn",
-        "session"
-      ],
-      "sortKeys": {
-        "recommended": 85
-      }
-    },
-    "dsh-session-rename": {
-      "title": {
-        "en": "Summarize & Rename",
-        "zh": "总结重命名"
-      },
-      "description": {
-        "en": "One click on a Session row summarizes the whole conversation into a one-line title and renames it in place; an optional switch on the plugin page prefixes the title with the devops requirement number and platform title.",
-        "zh": "在会话行悬停时点一下，用这个会话自己的模型把整段对话概括成一行标题并直接重命名；插件页可开启「devops 编号前缀」，让标题带上需求编号与平台标题。"
-      },
-      "category": "ui",
-      "labels": [
-        "productivity"
-      ],
-      "keywords": [
-        "session",
-        "rename",
-        "title",
-        "summarize",
-        "sidebar",
-        "devops"
-      ],
-      "sortKeys": {
-        "recommended": 88
-      }
-    },
-    "dsh-remote-pair": {
-      "title": {
-        "zh": "手机配对",
-        "en": "Phone pairing"
-      },
-      "description": {
-        "zh": "设置页里给出一个长期访问链接和二维码：任何浏览器扫码或打开链接都能登进这台 DSH，登录态保留 10 年；想作废就换一个新链接。",
-        "en": "Shows a long-lived access link and QR in Settings. Any browser that opens it signs in to this DSH, and the session lasts 10 years. Rotate the link to revoke."
-      },
-      "category": "tools",
-      "keywords": [],
-      "sortKeys": {
-        "recommended": 10
-      }
-    },
-    "dsh-workbench": {
-      "title": {
-        "zh": "工作台",
-        "en": "Workbench"
-      },
-      "description": {
-        "zh": "把会话变成可回溯的工作记录：给每个会话挂结论、下一步与单号，一屏看到进行中、未收尾和本周收尾，一键生成周报草稿。",
-        "en": "Turn Sessions into a reviewable work log: attach an outcome, a next step and a devops number to each Session, see what is open, unfinished and finished this week, and draft the weekly report in one click."
-      },
-      "category": "tools",
-      "keywords": [],
-      "sortKeys": {
-        "recommended": 10
-      }
-    },
-    "dsh-autocomplete": {
-      "title": {
-        "zh": "自动补全",
-        "en": "Autocomplete"
-      },
-      "description": {
-        "zh": "每轮任务结束后，在输入框里浮出一句你下一句可能想说的话（灰字，和 placeholder 同样式）；桌面按 Tab、手机点「填入」，一键变成可编辑草稿，不会自动发送。任务进行中、输入框有草稿时都不会打扰你。",
-        "en": "After every turn, one predicted next sentence appears as ghost text inside the message box. Tab on desktop, tap 填入 on touch, and it becomes an editable draft — it never sends. Nothing shows while a turn runs or while you are typing."
-      },
-      "category": "ui",
-      "keywords": [
-        "composer",
-        "autocomplete",
-        "suggestion",
-        "tab",
-        "ghost-text",
-        "prediction"
-      ],
-      "sortKeys": {
-        "recommended": 95
-      },
-      "labels": [
-        "productivity"
-      ]
-    },
-    "dsh-fast-read": {
-      "title": {
-        "zh": "速读",
-        "en": "速读"
-      },
-      "description": {
-        "zh": "导入一本书，得到导读、脑图、关系图与知识图谱：每个节点、每条关系都能点回书里的原句，模型编不出来的那种「读懂」。",
-        "en": "把一本书拆成导读、脑图、关系图与带出处的知识图谱：导入 EPUB/PDF/TXT/DOCX，每个节点都能点回原书原句。"
-      },
-      "category": "tools",
-      "keywords": [],
-      "sortKeys": {
-        "recommended": 10
-      }
-    }
+  "description": {
+   "en": "Nemo's DSH plugins, installed straight from GitHub and pinned per commit.",
+   "zh": "Nemo 个人维护的 DSH 插件，直接从 GitHub 安装，按 commit 精确定位版本。"
   }
+ },
+ "metadata": {
+  "categories": {
+   "ui": {
+    "title": {
+     "en": "Interface",
+     "zh": "界面"
+    }
+   },
+   "workflow": {
+    "title": {
+     "en": "Workflow",
+     "zh": "工作流"
+    }
+   },
+   "tools": {
+    "title": {
+     "en": "Tools",
+     "zh": "工具"
+    }
+   }
+  },
+  "labels": {
+   "productivity": {
+    "title": {
+     "en": "Productivity",
+     "zh": "效率"
+    }
+   },
+   "notifications": {
+    "title": {
+     "en": "Notifications",
+     "zh": "通知"
+    }
+   },
+   "quota": {
+    "title": {
+     "en": "Quota",
+     "zh": "额度"
+    }
+   },
+   "cost": {
+    "title": {
+     "en": "Cost",
+     "zh": "费用"
+    }
+   }
+  },
+  "sortKeys": {
+   "recommended": {
+    "title": {
+     "en": "Recommended",
+     "zh": "推荐度"
+    },
+    "order": "desc"
+   }
+  }
+ },
+ "plugins": {
+  "dsh-plugin-export": {
+   "title": {
+    "en": "Plugin Export",
+    "zh": "插件导出"
+   },
+   "description": {
+    "en": "Export an installed plugin bundle as one shareable .tgz, with the install instructions copied for you.",
+    "zh": "把已安装的插件打包成一个可直接分享、可直接安装的 .tgz，并自动复制安装说明。"
+   },
+   "category": "tools",
+   "labels": [
+    "productivity"
+   ],
+   "keywords": [
+    "export",
+    "bundle",
+    "tgz",
+    "share"
+   ],
+   "sortKeys": {
+    "recommended": 90
+   }
+  },
+  "dsh-pinned-top": {
+   "title": {
+    "en": "Pinned on Top",
+    "zh": "置顶在最上"
+   },
+   "description": {
+    "en": "Lift pinned sessions into a Pinned section at the very top of the sidebar, plus one-click archive for a whole workspace row.",
+    "zh": "把置顶会话收拢到侧边栏最上方的「置顶」分区，并可一键归档某个工作区的全部会话。"
+   },
+   "category": "ui",
+   "labels": [
+    "productivity"
+   ],
+   "keywords": [
+    "sidebar",
+    "pinned",
+    "sessions",
+    "archive"
+   ],
+   "sortKeys": {
+    "recommended": 100
+   }
+  },
+  "dsh-task-notify": {
+   "title": {
+    "en": "Task Notify",
+    "zh": "任务完成通知"
+   },
+   "description": {
+    "en": "macOS desktop notification when an agent turn finishes, fails or is interrupted, and when the agent waits for your answer.",
+    "zh": "任务跑完、出错或被打断，或者智能体停下来等你回答或审批时，弹一条 macOS 电脑通知。"
+   },
+   "category": "workflow",
+   "labels": [
+    "notifications"
+   ],
+   "keywords": [
+    "notification",
+    "macos",
+    "agent",
+    "reminder"
+   ],
+   "sortKeys": {
+    "recommended": 80
+   }
+  },
+  "dsh-opencode-quota": {
+   "title": {
+    "en": "OpenCode Go Quota",
+    "zh": "OpenCode Go 额度"
+   },
+   "description": {
+    "en": "OpenCode Go quota in the sidebar foot: the badge previews the rolling (5h) window's remaining percentage and reset time; open it for the 5h, weekly and monthly windows with usage and reset times.",
+    "zh": "在页面左下角显示 OpenCode Go 订阅额度：徽章预览滚动（5 小时）窗口的剩余百分比和刷新时间，点开查看 5 小时、每周、每月三个窗口的用量与重置时间。"
+   },
+   "category": "tools",
+   "labels": [
+    "quota"
+   ],
+   "keywords": [
+    "opencode",
+    "quota",
+    "usage",
+    "sidebar"
+   ],
+   "sortKeys": {
+    "recommended": 70
+   }
+  },
+  "dsh-cost-stat": {
+   "title": {
+    "en": "Task Cost",
+    "zh": "任务花费"
+   },
+   "description": {
+    "en": "Estimates the model spend of the current Session using DeepSeek's published pricing: peak/off-peak and cached/uncached input are priced separately, with per-turn and cumulative amounts.",
+    "zh": "按 DeepSeek 计费标准估算当前会话的模型调用花费：输入/输出、缓存命中/未命中、高峰/空闲分别计价，输入框下方显示累计、每条回复底部显示本轮金额。"
+   },
+   "category": "tools",
+   "labels": [
+    "cost"
+   ],
+   "keywords": [
+    "cost",
+    "price",
+    "token",
+    "deepseek",
+    "spend",
+    "billing"
+   ],
+   "sortKeys": {
+    "recommended": 60
+   }
+  },
+  "dsh-turn-duration": {
+   "title": {
+    "en": "Turn Duration",
+    "zh": "单轮耗时"
+   },
+   "description": {
+    "en": "How long each assistant turn took, shown under its final reply: model time, tool calls and waiting included, with the start and end clock times on hover.",
+    "zh": "在每条助手回复底部显示这一轮从开始到结束用了多久：包含模型思考、工具调用和等待，悬停可看起止时间；历史会话同样按日志补算。"
+   },
+   "category": "ui",
+   "labels": [
+    "productivity"
+   ],
+   "keywords": [
+    "duration",
+    "elapsed",
+    "timing",
+    "turn",
+    "session"
+   ],
+   "sortKeys": {
+    "recommended": 85
+   }
+  },
+  "dsh-session-rename": {
+   "title": {
+    "en": "Summarize & Rename",
+    "zh": "总结重命名"
+   },
+   "description": {
+    "en": "One click on a Session row summarizes the whole conversation into a one-line title and renames it in place; an optional switch on the plugin page prefixes the title with the devops requirement number and platform title.",
+    "zh": "在会话行悬停时点一下，用这个会话自己的模型把整段对话概括成一行标题并直接重命名；插件页可开启「devops 编号前缀」，让标题带上需求编号与平台标题。"
+   },
+   "category": "ui",
+   "labels": [
+    "productivity"
+   ],
+   "keywords": [
+    "session",
+    "rename",
+    "title",
+    "summarize",
+    "sidebar",
+    "devops"
+   ],
+   "sortKeys": {
+    "recommended": 88
+   }
+  },
+  "dsh-remote-pair": {
+   "title": {
+    "zh": "手机配对",
+    "en": "Phone pairing"
+   },
+   "description": {
+    "zh": "设置页里给出一个长期访问链接和二维码：任何浏览器扫码或打开链接都能登进这台 DSH，登录态保留 10 年；想作废就换一个新链接。",
+    "en": "Shows a long-lived access link and QR in Settings. Any browser that opens it signs in to this DSH, and the session lasts 10 years. Rotate the link to revoke."
+   },
+   "category": "tools",
+   "keywords": [],
+   "sortKeys": {
+    "recommended": 10
+   }
+  },
+  "dsh-workbench": {
+   "title": {
+    "zh": "工作台",
+    "en": "Workbench"
+   },
+   "description": {
+    "zh": "把会话变成可回溯的工作记录：给每个会话挂结论、下一步与单号，一屏看到进行中、未收尾和本周收尾，一键生成周报草稿。",
+    "en": "Turn Sessions into a reviewable work log: attach an outcome, a next step and a devops number to each Session, see what is open, unfinished and finished this week, and draft the weekly report in one click."
+   },
+   "category": "tools",
+   "keywords": [],
+   "sortKeys": {
+    "recommended": 10
+   }
+  },
+  "dsh-autocomplete": {
+   "title": {
+    "zh": "自动补全",
+    "en": "Autocomplete"
+   },
+   "description": {
+    "zh": "每轮任务结束后，在输入框里浮出一句你下一句可能想说的话（灰字，和 placeholder 同样式）；桌面按 Tab、手机点「填入」，一键变成可编辑草稿，不会自动发送。任务进行中、输入框有草稿时都不会打扰你。",
+    "en": "After every turn, one predicted next sentence appears as ghost text inside the message box. Tab on desktop, tap 填入 on touch, and it becomes an editable draft — it never sends. Nothing shows while a turn runs or while you are typing."
+   },
+   "category": "ui",
+   "keywords": [
+    "composer",
+    "autocomplete",
+    "suggestion",
+    "tab",
+    "ghost-text",
+    "prediction"
+   ],
+   "sortKeys": {
+    "recommended": 95
+   },
+   "labels": [
+    "productivity"
+   ]
+  },
+  "dsh-fast-read": {
+   "title": {
+    "zh": "速读",
+    "en": "速读"
+   },
+   "description": {
+    "zh": "导入一本书，得到导读、脑图、关系图与知识图谱：每个节点、每条关系都能点回书里的原句，模型编不出来的那种「读懂」。",
+    "en": "把一本书拆成导读、脑图、关系图与带出处的知识图谱：导入 EPUB/PDF/TXT/DOCX，每个节点都能点回原书原句。"
+   },
+   "category": "tools",
+   "keywords": [],
+   "sortKeys": {
+    "recommended": 10
+   }
+  },
+  "dsh-meeting-notes": {
+   "title": {
+    "zh": "会议纪要",
+    "en": "Meeting Notes"
+   },
+   "description": {
+    "zh": "开会时一键开始记录：本机录下系统声音和你的麦克风，自动转写原文，会后生成纪要并留档；历史可搜、可回放、可导出。",
+    "en": "Start recording on demand: capture system audio plus your microphone locally, transcribe, generate your own minutes, and keep every meeting archived with search, playback, and export."
+   },
+   "category": "tools",
+   "keywords": [
+    "会议",
+    "纪要",
+    "录音",
+    "转写",
+    "会议记录",
+    "meeting",
+    "minutes",
+    "transcribe",
+    "whisper"
+   ],
+   "sortKeys": {
+    "recommended": 10
+   }
+  }
+ }
 }

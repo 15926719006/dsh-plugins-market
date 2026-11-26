@@ -1,0 +1,5 @@
+# 会议纪要：左侧栏一个入口 + 整页（录制 / 历史 / 详情）。
+# 不替换任何官方 bundle，只在自己的一行里挂 Host 路由与两个 Client 座位。
+- insert:
+    - id: meeting-notes
+      name: '@local/dsh-meeting-notes'
